@@ -1,0 +1,4 @@
+openai
+mss
+pywin32
+python-dotenv
