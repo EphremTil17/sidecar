@@ -29,6 +29,8 @@ VK_M = 0x4D # 'M' for Model Toggle
 # Toggle state: True = Pro/Reasoning, False = Flash
 USE_PRO_MODEL = False 
 MONITOR_INDEX = 1 # Default, will be updated in main
+SESSION_CONTEXT = "" # User-provided context (e.g. Job Description)
+chat_session = None # The active stateful chat object
 
 # --- INITIALIZATION ---
 if not API_KEY:
@@ -120,22 +122,14 @@ def capture_screen_bytes():
         # Convert to PNG bytes
         return mss.tools.to_png(sct_img.rgb, sct_img.size)
 
-def process_request():
-    """Handles the capture and API call sequence."""
-    global USE_PRO_MODEL
+def init_chat():
+    """Initializes or resets the chat session with the current model and context."""
+    global chat_session
     
-    # 1. Capture
-    print("\n[O] Capturing...", end="", flush=True)
-    png_bytes = capture_screen_bytes()
-    if not png_bytes:
-        return
-
-    # 2. Prepare Prompt & Config
     system_prompt = load_context()
     
     if USE_PRO_MODEL:
         model_id = "models/gemini-3-pro-preview"
-        print(" (PRO/THINKING)", end="\r", flush=True)
         # Gemini 3 Pro Thinking Config
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -143,26 +137,51 @@ def process_request():
             thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="low")
         )
     else:
-        model_id = "models/gemini-flash-latest"
-        print(" (FLASH)", end="\r", flush=True)
+        model_id = "models/gemini-3-flash-preview"
         # Standard Config
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
             temperature=1.0
         )
+        
+    # Create the chat session
+    chat_session = client.chats.create(model=model_id, config=config)
+    
+    # Prime with Session Context if available
+    if SESSION_CONTEXT:
+        # We send this as a user message to establish history
+        # Using a dummy prompt to ensure the model acknowledges it without doing work yet
+        prime_msg = f"CONTEXT FOR THIS SESSION:\n{SESSION_CONTEXT}\n\nPlease acknowledge this context."
+        try:
+            chat_session.send_message(prime_msg)
+        except Exception as e:
+            print(f"[!] Warning: Failed to prime chat context: {e}")
+
+def process_request():
+    """Handles the capture and API call sequence."""
+    
+    # 1. Capture
+    print("\n[O] Capturing...", end="", flush=True)
+    png_bytes = capture_screen_bytes()
+    if not png_bytes:
+        return
+
+    # Mode Indicator
+    if USE_PRO_MODEL:
+        print(" (PRO/THINKING)", end="\r", flush=True)
+    else:
+        print(" (FLASH)", end="\r", flush=True)
 
     print("\n Analyzing...", end="\r", flush=True)
 
-    # 3. Call API
+    # 3. Call API via Chat Session
     try:
         # Create image part from bytes
         image_part = types.Part.from_bytes(data=png_bytes, mime_type="image/png")
         
-        # Generate Content Stream
-        response_stream = client.models.generate_content_stream(
-            model=model_id,
-            contents=["Analyze this view.", image_part],
-            config=config
+        # Send message to existing history
+        response_stream = chat_session.send_message_stream(
+            message=["Analyze this view.", image_part]
         )
 
         print(" " * 30, end="\r") # Clear "Analyzing..."
@@ -181,7 +200,8 @@ def toggle_model():
     global USE_PRO_MODEL
     USE_PRO_MODEL = not USE_PRO_MODEL
     mode_str = "PRO (Thinking)" if USE_PRO_MODEL else "FLASH (Fast)"
-    print(f"\n[i] Switched Model to: {mode_str}")
+    print(f"\n[i] Switched Model to: {mode_str} (Chat Reset)")
+    init_chat() # Reset chat with new model + same context
 
 def kill_conflicting_instances():
     """Finds and kills other running instances of this script using PowerShell."""
@@ -217,12 +237,29 @@ def kill_conflicting_instances():
         print(f"[!] Warning: Failed to cleanup instances: {e}")
 
 def main():
-    global MONITOR_INDEX
+    global MONITOR_INDEX, SESSION_CONTEXT
     
-    # Select monitor FIRST
+    # 1. Select monitor
     MONITOR_INDEX = get_monitor_index()
     
-    print(f"### SIDECLAR AI INITIALIZED ###")
+    # 2. Get Session Context (One-time setup)
+    print("\n--- Session Context ---")
+    print("Paste any background info (Job Description, Tech Stack, etc.) or press Enter to skip.")
+    print("Context: ", end="")
+    try:
+        # Simple input, maybe improve later for multi-line if needed
+        SESSION_CONTEXT = input().strip()
+        if SESSION_CONTEXT:
+            print(f"[i] Context loaded ({len(SESSION_CONTEXT)} chars).")
+    except KeyboardInterrupt:
+        sys.exit(0)
+        
+    # 3. Initialize Chat
+    print("[i] Initializing Chat Session...", end="", flush=True)
+    init_chat()
+    print(" Ready.")
+    
+    print(f"### SIDECAR AI INITIALIZED ###")
     print(f"Target: Monitor {MONITOR_INDEX}")
     print("Commands (Stealth):")
     print("  [P]rocess View: Ctrl + Alt + Shift + P")
