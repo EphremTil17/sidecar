@@ -4,17 +4,45 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+def get_vk_code(char, default):
+    """Simple helper to convert a character string to a Windows Virtual Key code."""
+    val = os.getenv(char)
+    if not val:
+        return default
+    
+    # If it's a single character like 'P', convert to 0x50
+    if len(val) == 1:
+        return ord(val.upper())
+    
+    # If it's already a hex string like 0x50
+    if val.startswith('0x'):
+        return int(val, 16)
+    
+    return default
+
 # API Configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 SIDECAR_MONITOR_INDEX = os.getenv("SIDECAR_MONITOR_INDEX")
 
 # Capture Configuration
-CROP_MARGINS = {"top": 120, "bottom": 40, "left": 0, "right": 0}
+CROP_MARGINS = {
+    "top": int(os.getenv("SIDECAR_CROP_TOP", 120)),
+    "bottom": int(os.getenv("SIDECAR_CROP_BOTTOM", 40)),
+    "left": int(os.getenv("SIDECAR_CROP_LEFT", 0)),
+    "right": int(os.getenv("SIDECAR_CROP_RIGHT", 0))
+}
 
 # Hotkey Configuration (Virtual Key Codes)
-VK_P = 0x50 # 'P' for Process
-VK_M = 0x4D # 'M' for Model Toggle
-VK_S = 0x53 # 'S' for Skill Swap
+# Default Modifiers: Ctrl (0x0002) + Alt (0x0001) + Shift (0x0004) = 0x0007
+MODIFIERS = 0x0001 | 0x0002 | 0x0004 
+VK_P = get_vk_code("HOTKEY_PROCESS", 0x50)        # Default 'P'
+VK_M = get_vk_code("HOTKEY_MODEL_TOGGLE", 0x4D) # Default 'M'
+VK_S = get_vk_code("HOTKEY_SKILL_SWAP", 0x53)    # Default 'S'
+
+# Intelligence Configuration
+MODEL_FLASH = os.getenv("MODEL_FLASH", "models/gemini-3-flash-preview")
+MODEL_PRO = os.getenv("MODEL_PRO", "models/gemini-3-pro-preview")
+THINKING_LEVEL = os.getenv("SIDECAR_THINKING_LEVEL", "low") # Options: low, medium, high
 
 # State Defaults
 DEFAULT_MONITOR_INDEX = 1

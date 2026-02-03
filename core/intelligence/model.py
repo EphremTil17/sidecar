@@ -24,19 +24,24 @@ class SidecarBrain:
         return self.use_pro_model
 
     def get_model_name(self):
-        return "PRO (Thinking)" if self.use_pro_model else "FLASH (Fast)"
+        if self.use_pro_model:
+            return f"PRO (Thinking: {settings.THINKING_LEVEL})"
+        return "FLASH (Fast)"
 
     def init_chat(self):
         """Initializes or resets the chat session with the current system prompt."""
         if self.use_pro_model:
-            model_id = "models/gemini-3-pro-preview" 
+            model_id = settings.MODEL_PRO
             config = types.GenerateContentConfig(
                 system_instruction=self.current_system_prompt,
                 temperature=1.0, 
-                thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="low")
+                thinking_config=types.ThinkingConfig(
+                    include_thoughts=True, 
+                    thinking_level=settings.THINKING_LEVEL
+                )
             )
         else:
-            model_id = "models/gemini-3-flash-preview"
+            model_id = settings.MODEL_FLASH
             config = types.GenerateContentConfig(
                 system_instruction=self.current_system_prompt,
                 temperature=1.0

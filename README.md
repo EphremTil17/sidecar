@@ -37,7 +37,7 @@ SidecarAI/
 ### 1. Prerequisites
 - **Windows OS:** (Required for native `pywin32` hotkey hooks).
 - **Python 3.12+**
-- **Google GenAI API Key:** Access to Gemini 2.0 Flash and Gemini 3.0 Pro.
+- **Google GenAI API Key:** Access to Gemini models.
 
 ### 2. Environment Configuration
 SidecarAI is designed with a **Self-Healing Setup**. Simply launch the application:
@@ -45,6 +45,25 @@ SidecarAI is designed with a **Self-Healing Setup**. Simply launch the applicati
 python sidecar.py
 ```
 If your `GOOGLE_API_KEY` is not found, the system will interactively guide you through the setup and generate your `.env` configuration automatically.
+
+#### Advanced Configuration (`.env`)
+You can fine-tune the application by editing the generated `.env` file:
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `GOOGLE_API_KEY` | Your Google Gemini API Key | Required |
+| `SIDECAR_MONITOR_INDEX` | Index of the monitor to capture | `1` |
+| `SIDECAR_CROP_TOP` | Pixels to crop from the top | `120` |
+| `SIDECAR_CROP_BOTTOM` | Pixels to crop from the bottom | `40` |
+| `HOTKEY_PROCESS` | Primary key for "Analyze View" | `P` |
+| `HOTKEY_MODEL_TOGGLE` | Primary key for "Toggle Model" | `M` |
+| `HOTKEY_SKILL_SWAP` | Primary key for "Swap Skill" | `S` |
+| `MODEL_FLASH` | The model ID for fast analysis | `gemini-3-flash-preview` |
+| `MODEL_PRO` | The model ID for deep reasoning | `gemini-3-pro-preview` |
+| `SIDECAR_THINKING_LEVEL` | "Thinking" depth (low, medium, high) | `low` |
+| `SIDECAR_DEBUG` | Save capture snapshots to disk | `False` |
+
+*Note: All hotkeys use the hardcoded modifier `Ctrl + Alt + Shift`.*
 
 ### 3. Skill Customization
 Each agent "Skill" resides in its own folder under `skills/` and is defined by three distinct layers:
@@ -72,7 +91,7 @@ python core/utils/debug_crop.py
 Outputs are saved to the `debug_output/` directory for visual audit.
 
 ## Technology Stack
-- **Engine:** Google Vertex/AI Studio (Gemini 2.0/3.0)
+- **Engine:** Google Vertex/AI Studio (Gemini 3.0)
 - **Capture:** `mss` (Multi-screen Screenshot)
 - **Hooks:** Win32 API via `ctypes`
 - **Logic:** Custom modular Python orchestration

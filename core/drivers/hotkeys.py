@@ -16,11 +16,11 @@ class HotkeyManager:
 
     def register_hotkey(self, id, vk_code, callback):
         """
-        Registers a global hotkey (Ctrl + Alt + Shift + vk_code).
+        Registers a global hotkey with configured modifiers.
         Returns True if successful.
         """
-        # fixed modifiers for this app: Ctrl + Alt + Shift
-        modifiers = MOD_CONTROL | MOD_ALT | MOD_SHIFT
+        from core.config import settings
+        modifiers = settings.MODIFIERS
         success = self.user32.RegisterHotKey(None, id, modifiers, vk_code)
         if success:
             self.hotkeys[id] = callback
