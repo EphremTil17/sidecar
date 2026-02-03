@@ -1,53 +1,78 @@
 # SidecarAI
 
 ## Project Overview
-**SidecarAI** is a stealthy, high-bandwidth visual assistant. It observes your active workflow on Monitor 1 and streams intelligence to Monitor 2 via a terminal interface, triggered by a global hotkey without ever stealing focus.
+**SidecarAI** is a high-performance, modular visual assistant designed for seamless, focus-preserving intelligence. It observes your active workflow and streams specialized analysis to a terminal interface via global hotkey triggers.
 
 ## Key Features
-- **Stealth Capture:** Automatically crops browser tabs (top 120px) and taskbar (bottom 40px).
-- **Zero-Focus:** Interaction triggers via global hotkey; output is standard stdout.
-- **Dual AI Engine:**
-    - **Flash Mode:** Uses `gemini-2.0-flash-exp` for instant, low-latency visual analysis.
-    - **Pro Mode:** Uses `gemini-3.0-pro-preview` with **Low Thinking** enabled for complex reasoning and code analysis.
+- **Modular Skill System:** Folder-based agent architecture with triple-layer prompting (Identity, Instructions, Context).
+- **Prompt Pivoting:** Hot-swap personas mid-session while maintaining full conversational history and state.
+- **Stealth Visual Capture:** Passive screen observation with user-customizable crop margins for privacy and layout optimization.
+- **Advanced Ingestion:** Integrated Notepad-bridge for clean ingestion of large datasets (codebase, logs, documentation).
+- **Audio-Ready Pipeline:** Automated polling hooks for seamless integration with external transcription models (e.g., Whisper).
+- **Dual Inference Engine:** 
+  - **Flash Mode:** Low-latency visual analysis.
+  - **Pro Mode:** Advanced reasoning with active "Thinking" capabilities for complex logic.
 
-## Technology Stack
-- **Language:** Python 3.12+
-- **Screen Capture:** `mss`
-- **Windows API:** `pywin32` (ctypes) for passive hotkeys.
-- **AI SDK:** `google-genai` (Official Google Gen AI SDK v1 Beta).
+## Technical Architecture
+The project follows a decoupling-first approach with a minimal orchestrator pattern.
+
+```text
+SidecarAI/
+├── core/                   # Internal Logic Package
+│   ├── config/             # Application constants & environment
+│   ├── drivers/            # OS-level hardware abstractions (Hotkeys)
+│   ├── ingestion/          # Multi-modal data handling (Vision, Audio)
+│   ├── intelligence/       # AI Engine & Skill management
+│   ├── ui/                 # Terminal interaction layers
+│   └── utils/              # Diagnostic & Setup utilities
+├── skills/                 # User-defined Agent Personas (Cartridges)
+│   ├── _template/          # Reference implementation blueprint
+│   └── default/            # Active entry-point skill
+├── sidecar.py              # Lean Orchestrator (Entry Point)
+└── requirements.txt        # Dependency manifest
+```
 
 ## Setup & Installation
 
 ### 1. Prerequisites
-- Windows OS (required for `pywin32`).
-- Python 3.x installed.
-- Access to Gemini 3.0 Pro Preview (for Pro mode).
+- **Windows OS:** (Required for native `pywin32` hotkey hooks).
+- **Python 3.12+**
+- **Google GenAI API Key:** Access to Gemini 2.0 Flash and Gemini 3.0 Pro.
 
-### 2. Install Dependencies
-Run the following command to install the required libraries:
+### 2. Environment Configuration
+SidecarAI is designed with a **Self-Healing Setup**. Simply launch the application:
 ```bash
-pip install -r requirements.txt
+python sidecar.py
+```
+If your `GOOGLE_API_KEY` is not found, the system will interactively guide you through the setup and generate your `.env` configuration automatically.
+
+### 3. Skill Customization
+Each agent "Skill" resides in its own folder under `skills/` and is defined by three distinct layers:
+- `identity.md`: The agent's persona and core behavior.
+- `instructions.md`: Logical methodology and operational rules.
+- `context.md`: Session-specific background knowledge (supports `{{PLACEHOLDER}}` variables).
+
+## Usage & Interaction
+
+### Standard Execution
+```bash
+python sidecar.py
 ```
 
-### 3. Environment Configuration
-Create a `.env` file in the root directory and add your Google API key:
-```env
-GOOGLE_API_KEY=AIzaSy...
+### Global Hotkeys
+- **Analyze View:** `Ctrl + Alt + Shift + P` (Process current screen view)
+- **Toggle Model:** `Ctrl + Alt + Shift + M` (Switch between Flash & Pro Reasoning)
+- **Swap Skill:** `Ctrl + Alt + Shift + S` (Trigger mid-conversation Pivot)
+
+### Diagnostic Utilities
+To verify your visual capture bounds and test crop margins:
+```bash
+python core/utils/debug_crop.py
 ```
+Outputs are saved to the `debug_output/` directory for visual audit.
 
-## Usage
-
-1.  **Start the application:**
-    ```bash
-    python main.py
-    ```
-2.  **Commands:**
-    *   **Analyze View:** `Ctrl + Alt + Shift + P`
-        *   Captures screen, sends to current model, streams text.
-    *   **Toggle Model:** `Ctrl + Alt + Shift + M`
-        *   Switches between **FLASH** (Fast) and **PRO** (Thinking).
-    *   **Exit:** `Ctrl + C` in the terminal window.
-
-## Troubleshooting
-- **API Errors:** If you receive a 400 error regarding `thinking_level`, ensure you are using the `google-genai` SDK (not `google-generativeai` or `openai`) and that your API key has access to the preview models.
-- **Hotkeys:** If the app says "Hotkey already in use," check if another instance or application is grabbing `Ctrl+Alt+Shift+P`.
+## Technology Stack
+- **Engine:** Google Vertex/AI Studio (Gemini 2.0/3.0)
+- **Capture:** `mss` (Multi-screen Screenshot)
+- **Hooks:** Win32 API via `ctypes`
+- **Logic:** Custom modular Python orchestration
