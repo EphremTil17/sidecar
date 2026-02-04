@@ -26,8 +26,29 @@ def handle_process_request():
     stream = brain.analyze_image_stream(png_bytes, additional_text=audio_text)
     
     print(" " * 30, end="\r> ")
-    for text_chunk in stream:
-        print(text_chunk, end="", flush=True)
+    is_thinking = False
+    
+    try:
+        for chunk in stream:
+            # The google-genai SDK response chunk has candidates -> content -> parts
+            for candidate in chunk.candidates:
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        # Thoughts
+                        if part.thought:
+                            if not is_thinking:
+                                print("\n[THINKING]:", end=" ", flush=True)
+                                is_thinking = True
+                            print(part.text, end="", flush=True)
+                        
+                        # Final Text
+                        elif part.text:
+                            if is_thinking:
+                                print("\n\n[RESPONSE]:", end=" ", flush=True)
+                                is_thinking = False
+                            print(part.text, end="", flush=True)
+    except Exception as e:
+        print(f"\n[!] Stream Error: {e}")
     print("\n")
 
 def handle_toggle_model():
@@ -42,27 +63,57 @@ def handle_skill_swap():
         print(f"[i] Loading '{selected}'...")
         data = skill_manager.load_skill(selected)
         prompt = skill_manager.assemble_prompt(data)
-        ack = brain.pivot_skill(data, prompt)
-        print(f"\n[SYSTEM]: {ack}\n### Skill Swapped to: {selected} ###")
+        
+        print("\n[SYSTEM]:", end=" ", flush=True)
+        stream = brain.pivot_skill(data, prompt)
+        try:
+            for chunk in stream:
+                for candidate in chunk.candidates:
+                    if candidate.content and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if part.text:
+                                print(part.text, end="", flush=True)
+        except Exception as e:
+            print(f"\n[!] Pivot Error: {e}")
+            
+        print(f"\n### Skill Swapped to: {selected} ###\n")
 
 def main():
     global brain, capture_tool, skill_manager
 
+    # 0. Display Branding
+    CLI.print_logo()
+
     # 1. Config & Setup
-    if not settings.GOOGLE_API_KEY and not ensure_config(): sys.exit(1)
-    importlib.reload(sys.modules['core.config.settings'])
-    from core.config import settings as settings
+    if not settings.GOOGLE_API_KEY:
+        if not ensure_config():
+            sys.exit(1)
+        importlib.reload(sys.modules['core.config.settings'])
 
     # 2. Initialization
     skill_manager = SkillManager()
     monitors = get_available_monitors()
-    monitor_idx = CLI.select_monitor_menu(monitors) if not settings.SIDECAR_MONITOR_INDEX else get_default_monitor_index()
+    
+    # Always prompt for monitor unless SIDECAR_MONITOR_INDEX is explicitly set to skip (or use get_default_monitor_index)
+    if not settings.SIDECAR_MONITOR_INDEX:
+        monitor_idx = CLI.select_monitor_menu(monitors)
+    else:
+        # If it's in the env, we can still show the menu but default to it, 
+        # or just skip if the user is happy. Let's make it prompt by default for better control.
+        # monitor_idx = get_default_monitor_index()
+        monitor_idx = CLI.select_monitor_menu(monitors)
     
     capture_tool = ScreenCapture(monitor_idx)
     brain = SidecarBrain(settings.GOOGLE_API_KEY)
 
     # 3. Boot Skills & Context
     skill_name = CLI.select_skill_menu(skill_manager.list_skills())
+    
+    # Handle New Skill Creation
+    if skill_name == "NEW_SKILL":
+        skill_name = skill_manager.create_new_skill()
+        if not skill_name: skill_name = "default" # Fallback
+        
     data = skill_manager.load_skill(skill_name)
     prompt = skill_manager.assemble_prompt(data)
     brain.set_skill(data, prompt)

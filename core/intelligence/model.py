@@ -30,22 +30,19 @@ class SidecarBrain:
 
     def init_chat(self):
         """Initializes or resets the chat session with the current system prompt."""
-        if self.use_pro_model:
-            model_id = settings.MODEL_PRO
-            config = types.GenerateContentConfig(
-                system_instruction=self.current_system_prompt,
-                temperature=1.0, 
-                thinking_config=types.ThinkingConfig(
-                    include_thoughts=True, 
-                    thinking_level=settings.THINKING_LEVEL
-                )
+        # Check if the chosen model supports thinking (Gemini 3+)
+        model_id = settings.MODEL_PRO if self.use_pro_model else settings.MODEL_FLASH
+        
+        # We enable thinking if include_thoughts is True, and set the level
+        # Note: Flash and Pro handle levels slightly differently but 'low'/'high' are common.
+        config = types.GenerateContentConfig(
+            system_instruction=self.current_system_prompt,
+            temperature=1.0,
+            thinking_config=types.ThinkingConfig(
+                include_thoughts=True,
+                thinking_level=settings.THINKING_LEVEL
             )
-        else:
-            model_id = settings.MODEL_FLASH
-            config = types.GenerateContentConfig(
-                system_instruction=self.current_system_prompt,
-                temperature=1.0
-            )
+        )
             
         self.chat_session = self.client.chats.create(model=model_id, config=config)
 
@@ -72,13 +69,12 @@ Maintain conversation history but update your operational parameters:
 Please acknowledge you have absorbed these new instructions and are ready to continue the session with this new persona."""
         
         try:
-            # We send this as a standard message to "pivot" the model
-            # We use a stream to let the user see the acknowledgement if desired, 
-            # but usually we might just want to do this silently or with a quick confirmation.
-            response = self.chat_session.send_message(override_msg)
-            return response.text
+            # We return the stream so the UI can print the acknowledgement in real-time
+            return self.chat_session.send_message_stream(override_msg)
         except Exception as e:
-            return f"[!] Error during Pivot: {e}"
+            # Return a generator that yields the error so the UI handling remains consistent
+            def error_gen(): yield f"[!] Error during Pivot: {e}"
+            return error_gen()
 
     def analyze_image_stream(self, png_bytes, additional_text=""):
         """Generates a response stream for the given image bytes and optional text."""
@@ -96,13 +92,8 @@ Please acknowledge you have absorbed these new instructions and are ready to con
             if additional_text:
                 content_parts.append(f"\n[Additional User Input]: {additional_text}")
             
-            response_stream = self.chat_session.send_message_stream(
-                message=content_parts
-            )
-            
-            for chunk in response_stream:
-                if chunk.text:
-                    yield chunk.text
+            return self.chat_session.send_message_stream(message=content_parts)
                     
         except Exception as e:
-            yield f"\n[!] API Error: {e}"
+            def error_gen(): yield f"\n[!] API Error: {e}"
+            return error_gen()

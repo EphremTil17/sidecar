@@ -1,5 +1,5 @@
-import os
 from core.utils.editor import NotepadDriver
+from core.ui.logo import logo
 
 class CLI:
     @staticmethod
@@ -22,17 +22,19 @@ class CLI:
 
     @staticmethod
     def select_skill_menu(skills):
-        if not skills:
-            return "default"
-        
         print("\n--- Select Initial Skill ---")
         for i, s in enumerate(skills):
             print(f"[{i+1}] {s}")
+        print(f"[{len(skills)+1}] [+ Create New Skill]")
         
         print("Selection (Default is 1): ", end="")
         try:
             choice = input().strip()
             idx = int(choice) - 1 if choice else 0
+            
+            if idx == len(skills):
+                return "NEW_SKILL"
+            
             return skills[idx] if 0 <= idx < len(skills) else skills[0]
         except:
             return skills[0]
@@ -66,12 +68,19 @@ class CLI:
         return None
 
     @staticmethod
+    def print_logo():
+        print(logo)
+        print("=" * 75)
+        print(" " * 30 + "Welcome to SidecarAI")
+        print("=" * 75)
+
+    @staticmethod
     def print_welcome(monitor_idx, skill_name, model_name):
-        print(f"\n### SIDECAR AI INITIALIZED ###")
+        print(f"\n[SYSTEM READY]")
         print(f"Target: Monitor {monitor_idx} | Skill: {skill_name}")
-        print("Commands:")
+        print(f"Model : {model_name}")
+        print("\nCommands:")
         print("  [P]rocess: Ctrl + Alt + Shift + P")
         print("  [M]odel:   Ctrl + Alt + Shift + M")
         print("  [S]wap:    Ctrl + Alt + Shift + S")
-        print(f"Mode: {model_name}")
         print("-" * 30)
