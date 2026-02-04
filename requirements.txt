@@ -2,3 +2,4 @@ google-genai
 mss
 pywin32
 python-dotenv
+groq

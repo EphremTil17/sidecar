@@ -38,11 +38,17 @@ MODIFIERS = 0x0001 | 0x0002 | 0x0004
 VK_P = get_vk_code("HOTKEY_PROCESS", 0x50)        # Default 'P'
 VK_M = get_vk_code("HOTKEY_MODEL_TOGGLE", 0x4D) # Default 'M'
 VK_S = get_vk_code("HOTKEY_SKILL_SWAP", 0x53)    # Default 'S'
+VK_E = 0x45                                    # 'E' for Engine Toggle
 
 # Intelligence Configuration
+SIDECAR_ENGINE = os.getenv("SIDECAR_ENGINE", "gemini").lower()
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
 MODEL_FLASH = os.getenv("MODEL_FLASH", "models/gemini-3-flash-preview")
 MODEL_PRO = os.getenv("MODEL_PRO", "models/gemini-3-pro-preview")
-THINKING_LEVEL = os.getenv("SIDECAR_THINKING_LEVEL", "low") # Options: low, medium, high
+GROQ_MODEL = os.getenv("GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
+THINKING_LEVEL = os.getenv("SIDECAR_THINKING_LEVEL", "high") # Options: low, medium, high
 
 # State Defaults
 DEFAULT_MONITOR_INDEX = 1

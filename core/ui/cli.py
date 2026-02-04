@@ -21,13 +21,27 @@ class CLI:
             return primary_idx
 
     @staticmethod
+    def select_engine_menu(available_engines):
+        print("\n--- Select AI Engine ---")
+        for i, engine in enumerate(available_engines):
+            print(f"[{i+1}] {engine.upper()}")
+        
+        print("\nSelection (Default is 1): ", end="")
+        try:
+            choice = input().strip()
+            idx = int(choice) - 1 if choice else 0
+            return available_engines[idx] if 0 <= idx < len(available_engines) else available_engines[0]
+        except:
+            return available_engines[0]
+
+    @staticmethod
     def select_skill_menu(skills):
         print("\n--- Select Initial Skill ---")
         for i, s in enumerate(skills):
             print(f"[{i+1}] {s}")
         print(f"[{len(skills)+1}] [+ Create New Skill]")
         
-        print("Selection (Default is 1): ", end="")
+        print("\nSelection (Default is 1): ", end="")
         try:
             choice = input().strip()
             idx = int(choice) - 1 if choice else 0
@@ -75,12 +89,19 @@ class CLI:
         print("=" * 75)
 
     @staticmethod
+    def print_ready():
+        print("\n" + "=" * 50)
+        print(" [ STATUS: READY FOR CAPTURE ] (Ctrl+Alt+Shift+P) ")
+        print("=" * 50 + "\n")
+
+    @staticmethod
     def print_welcome(monitor_idx, skill_name, model_name):
         print(f"\n[SYSTEM READY]")
         print(f"Target: Monitor {monitor_idx} | Skill: {skill_name}")
         print(f"Model : {model_name}")
         print("\nCommands:")
         print("  [P]rocess: Ctrl + Alt + Shift + P")
+        print("  [E]ngine:  Ctrl + Alt + Shift + E")
         print("  [M]odel:   Ctrl + Alt + Shift + M")
         print("  [S]wap:    Ctrl + Alt + Shift + S")
         print("-" * 30)

@@ -49,12 +49,20 @@ def handle_process_request():
                             print(part.text, end="", flush=True)
     except Exception as e:
         print(f"\n[!] Stream Error: {e}")
-    print("\n")
+    
+    print("\n") # Section Gap
+    CLI.print_ready()
 
 def handle_toggle_model():
     brain.toggle_model()
     print(f"\n[i] Switched Model to: {brain.get_model_name()} (Chat Reset)")
     brain.init_chat()
+    CLI.print_ready()
+
+def handle_switch_engine():
+    msg = brain.switch_engine()
+    print(f"\n[i] {msg} ({brain.get_model_name()})")
+    CLI.print_ready()
 
 def handle_skill_swap():
     skills = skill_manager.list_skills()
@@ -76,7 +84,8 @@ def handle_skill_swap():
         except Exception as e:
             print(f"\n[!] Pivot Error: {e}")
             
-        print(f"\n### Skill Swapped to: {selected} ###\n")
+        print(f"\n### Skill Swapped to: {selected} ###")
+        CLI.print_ready()
 
 def main():
     global brain, capture_tool, skill_manager
@@ -85,7 +94,7 @@ def main():
     CLI.print_logo()
 
     # 1. Config & Setup
-    if not settings.GOOGLE_API_KEY:
+    if not settings.GOOGLE_API_KEY and not settings.GROQ_API_KEY:
         if not ensure_config():
             sys.exit(1)
         importlib.reload(sys.modules['core.config.settings'])
@@ -104,7 +113,18 @@ def main():
         monitor_idx = CLI.select_monitor_menu(monitors)
     
     capture_tool = ScreenCapture(monitor_idx)
-    brain = SidecarBrain(settings.GOOGLE_API_KEY)
+    brain = SidecarBrain(settings.GOOGLE_API_KEY, settings.GROQ_API_KEY)
+
+    # 2.5 Engine Selection
+    # Get available engines based on API keys
+    available_engines = ["gemini"]
+    if settings.GROQ_API_KEY:
+        available_engines.append("groq")
+    
+    # Only prompt if there's more than one engine available
+    if len(available_engines) > 1:
+        engine_name = CLI.select_engine_menu(available_engines)
+        brain.set_active_engine(engine_name)
 
     # 3. Boot Skills & Context
     skill_name = CLI.select_skill_menu(skill_manager.list_skills())
@@ -129,11 +149,22 @@ def main():
     print(" Ready.")
     
     CLI.print_welcome(monitor_idx, skill_name, brain.get_model_name())
+    CLI.print_ready()
 
     # 5. Hotkeys
     hk_manager = HotkeyManager()
-    callbacks = {1: handle_process_request, 2: handle_toggle_model, 3: handle_skill_swap}
-    vks = {1: settings.VK_P, 2: settings.VK_M, 3: settings.VK_S}
+    callbacks = {
+        1: handle_process_request, 
+        2: handle_toggle_model, 
+        3: handle_skill_swap,
+        4: handle_switch_engine
+    }
+    vks = {
+        1: settings.VK_P, 
+        2: settings.VK_M, 
+        3: settings.VK_S,
+        4: settings.VK_E
+    }
 
     for attempt in range(2):
         if all(hk_manager.register_hotkey(i, vks[i], callbacks[i]) for i in callbacks): break
