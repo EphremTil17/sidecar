@@ -14,13 +14,15 @@ class HotkeyManager:
         self.user32 = ctypes.windll.user32
         self.hotkeys = {}
 
-    def register_hotkey(self, id, vk_code, callback):
+    def register_hotkey(self, id, vk_code, callback, modifiers=None):
         """
-        Registers a global hotkey with configured modifiers.
+        Registers a global hotkey.
         Returns True if successful.
         """
-        from core.config import settings
-        modifiers = settings.MODIFIERS
+        if modifiers is None:
+            from core.config import settings
+            modifiers = settings.MODIFIERS
+            
         success = self.user32.RegisterHotKey(None, id, modifiers, vk_code)
         if success:
             self.hotkeys[id] = callback

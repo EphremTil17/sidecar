@@ -26,7 +26,6 @@ class SkillManager:
     def load_skill(self, skill_name):
         """
         Loads identity, instructions, and context from a skill folder.
-        Assembles them into a coherent system prompt structure.
         """
         skill_path = os.path.join(self.skills_dir, skill_name)
         if not os.path.exists(skill_path):
@@ -38,57 +37,43 @@ class SkillManager:
             "context": self._read_file(os.path.join(skill_path, "context.md"))
         }
 
-        # Check for variables in context
+        # Identify placeholders instead of prompting here
         placeholders = re.findall(r'\{\{(.*?)\}\}', data["context"])
-        if placeholders:
-            print(f"\n[i] Skill '{skill_name}' requires additional input:")
-            for var in placeholders:
-                # In a real app we might use our editor utility here if it's long
-                # For now, simple terminal input for variables
-                val = input(f"Enter value for {var}: ").strip()
-                data["context"] = data["context"].replace(f"{{{{{var}}}}}", val)
+        return data, placeholders
 
-        return data
-
-    def create_new_skill(self):
-        """
-        Interactively creates a new skill folder and its 3-layer components.
-        """
-        print("\n--- CREATE NEW SKILL ---")
-        skill_name = input("Enter Skill Name (e.g., 'flutter_expert'): ").strip().lower().replace(" ", "_")
-        if not skill_name:
-            print("[!] Skill creation cancelled.")
-            return None
-
+    def create_skill_files(self, skill_name, identity, instructions, context):
+        """Pure logic to create skill files."""
         skill_path = os.path.join(self.skills_dir, skill_name)
         if os.path.exists(skill_path):
-            print(f"[!] Skill folder '{skill_name}' already exists.")
-            return skill_name
-
-        os.makedirs(skill_path)
+            return False
         
-        # 1. Identity
-        identity = NotepadDriver.get_input("# IDENTITY\nDefine who this agent is (e.g., 'You are a senior Flutter engineer...')\n") or "You are a helpful assistant."
+        os.makedirs(skill_path)
         self._write_file(os.path.join(skill_path, "identity.md"), identity)
-
-        # 2. Instructions
-        instructions = NotepadDriver.get_input("# INSTRUCTIONS\nDefine how this agent works (e.g., 'Always use clean architecture...')\n") or "Follow user instructions carefully."
         self._write_file(os.path.join(skill_path, "instructions.md"), instructions)
-
-        # 3. Context
-        context = NotepadDriver.get_input("# CONTEXT\nProvide background data (e.g., 'The project uses Bloc...')\n") or ""
         self._write_file(os.path.join(skill_path, "context.md"), context)
+        return True
 
-        print(f"[SUCCESS] Skill '{skill_name}' created at {skill_path}")
-        return skill_name
 
     def assemble_prompt(self, skill_data):
-        """Combines the 3-layer data into a single system prompt."""
+        """Combines the 3-layer data into a unified, high-performance system prompt with Dialogue Protocol."""
+        
+        protocol = """
+## VERBAL INTERACTION PROTOCOL (Vector T)
+When you receive a [CONVERSATION TURN] or transcription context, respond as a high-level human collaborator.
+- Tone: Technical, direct, and conversational (like a senior peer pair-programming).
+- Format: Use concise bullet points for technical steps or code observations.
+- Script Style: Write your response as if perusing a script for a fluid technical dialogue.
+- Constraint: Avoid academic verbosity or generic AI filler. Focus purely on actionable insight.
+"""
+
         prompt = f"""# CORE IDENTITY
 {skill_data['identity']}
 
 # OPERATIONAL INSTRUCTIONS
 {skill_data['instructions']}
+
+# GLOBAL CONVERSATION PROTOCOL
+{protocol}
 
 # SESSION CONTEXT
 {skill_data['context']}

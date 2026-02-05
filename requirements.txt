@@ -3,3 +3,6 @@ mss
 pywin32
 python-dotenv
 groq
+colorama
+pytest
+pytest-mock

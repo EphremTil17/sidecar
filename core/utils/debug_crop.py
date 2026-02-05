@@ -1,8 +1,4 @@
 import os
-import sys
-
-# Ensure core is in path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.ingestion.screen import ScreenCapture, get_available_monitors
 from core.config import settings

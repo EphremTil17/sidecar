@@ -23,6 +23,12 @@ def get_vk_code(char, default):
 # API Configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 SIDECAR_MONITOR_INDEX = os.getenv("SIDECAR_MONITOR_INDEX")
+PROJECT_ROOT = os.getenv("PROJECT_ROOT", os.getcwd())
+_raw_trans_path = os.getenv("TRANSCRIPTION_PATH", "transcription.txt")
+if os.path.isabs(_raw_trans_path):
+    TRANSCRIPTION_PATH = _raw_trans_path
+else:
+    TRANSCRIPTION_PATH = os.path.abspath(os.path.join(PROJECT_ROOT, _raw_trans_path))
 
 # Capture Configuration
 CROP_MARGINS = {
@@ -35,9 +41,11 @@ CROP_MARGINS = {
 # Hotkey Configuration (Virtual Key Codes)
 # Default Modifiers: Ctrl (0x0002) + Alt (0x0001) + Shift (0x0004) = 0x0007
 MODIFIERS = 0x0001 | 0x0002 | 0x0004 
+
 VK_P = get_vk_code("HOTKEY_PROCESS", 0x50)        # Default 'P'
 VK_M = get_vk_code("HOTKEY_MODEL_TOGGLE", 0x4D) # Default 'M'
 VK_S = get_vk_code("HOTKEY_SKILL_SWAP", 0x53)    # Default 'S'
+VK_T = get_vk_code("HOTKEY_TALK", 0x54)          # Default 'T'
 VK_E = 0x45                                    # 'E' for Engine Toggle
 
 # Intelligence Configuration

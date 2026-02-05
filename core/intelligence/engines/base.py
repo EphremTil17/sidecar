@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import Generator
+from core.intelligence.events import SidecarEvent
 
 class BaseEngine(ABC):
     @abstractmethod
@@ -7,13 +9,13 @@ class BaseEngine(ABC):
         pass
 
     @abstractmethod
-    def stream_analysis(self, png_bytes, additional_text=""):
-        """Streams analysis of an image and optional text."""
+    def stream_analysis(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
+        """Streams analysis events (text, status, etc.)"""
         pass
 
     @abstractmethod
-    def stream_pivot(self, skill_data, assembled_prompt):
-        """Pivots the session to a new skill."""
+    def stream_pivot(self, skill_data: dict, assembled_prompt: str) -> Generator[SidecarEvent, None, None]:
+        """Pivots the session with event streaming."""
         pass
 
     @abstractmethod
