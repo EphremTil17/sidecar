@@ -56,7 +56,11 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MODEL_FLASH = os.getenv("MODEL_FLASH", "models/gemini-3-flash-preview")
 MODEL_PRO = os.getenv("MODEL_PRO", "models/gemini-3-pro-preview")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 THINKING_LEVEL = os.getenv("SIDECAR_THINKING_LEVEL", "high") # Options: low, medium, high
+
+# Audio Configuration
+AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 16000))
 
 # State Defaults
 DEFAULT_MONITOR_INDEX = 1

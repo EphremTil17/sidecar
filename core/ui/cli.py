@@ -1,3 +1,7 @@
+import time
+import sys
+if sys.platform == 'win32':
+    import msvcrt
 from core.utils.editor import NotepadDriver
 from core.ui.logo import logo
 from colorama import Fore, Style, init
@@ -6,6 +10,39 @@ from colorama import Fore, Style, init
 init(autoreset=True)
 
 class CLI:
+    Fore = Fore
+    Style = Style
+
+    @staticmethod
+    def wait_for_interrupt(timeout: int = 2) -> bool:
+        """
+        Displays a countdown and waits for a keypress.
+        Returns True if a key was pressed (indicating a request for setup).
+        """
+        print(f"\n{Fore.YELLOW}Launching last session... {Fore.WHITE}(Press any key for Setup in {timeout}s) ", end="", flush=True)
+        
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            remaining = int(timeout - (time.time() - start_time))
+            print(f"\r{Fore.YELLOW}Launching last session... {Fore.WHITE}(Press any key for Setup in {remaining}s) ", end="", flush=True)
+            
+            if sys.platform == 'win32':
+                if msvcrt.kbhit():
+                    # Clear the key from buffer
+                    msvcrt.getch()
+                    print(f"\n{Fore.GREEN}[+] Setup requested.")
+                    return True
+            else:
+                # Fallback for non-windows (though this app is focused on Windows)
+                import select
+                if select.select([sys.stdin], [], [], 0.1)[0]:
+                    sys.stdin.read(1)
+                    return True
+            
+            time.sleep(0.1)
+        
+        print(f"\r{Fore.GREEN}Launching last session... {Fore.WHITE}(Bypassing Setup)              \n")
+        return False
     @staticmethod
     def _get_context_status():
         """Builds a condensed status for context vectors."""
@@ -46,6 +83,27 @@ class CLI:
             return int(choice)
         except ValueError:
             return primary_idx
+
+    @staticmethod
+    def select_audio_device_menu(input_devices):
+        print("\n--- Available WASAPI Audio Devices ---")
+        if not input_devices:
+            print("[!] No WASAPI input devices detected.")
+            return None
+
+        for idx, (dev_id, name) in enumerate(input_devices):
+            print(f"[{idx}] {name}")
+        
+        print("\nSelect Audio Device Index (or press Enter for Default): ", end="")
+        try:
+            choice = input().strip()
+            if not choice:
+                return input_devices[0][0] # Default to first found
+            
+            selected_idx = int(choice)
+            return input_devices[selected_idx][0] if 0 <= selected_idx < len(input_devices) else input_devices[0][0]
+        except:
+            return input_devices[0][0]
 
     @staticmethod
     def select_engine_menu(available_engines):

@@ -6,3 +6,7 @@ groq
 colorama
 pytest
 pytest-mock
+sounddevice
+numpy
+scipy
+requests

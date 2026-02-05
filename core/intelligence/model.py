@@ -1,8 +1,9 @@
+import io
 from core.config import settings
 from core.intelligence.engines.gemini import GeminiEngine
 from core.intelligence.engines.groq_engine import GroqEngine
 from core.intelligence.events import SidecarEvent, SidecarEventType
-from typing import Generator
+from typing import Generator, Optional
 
 class SidecarBrain:
     def __init__(self, google_api_key, groq_api_key=None):

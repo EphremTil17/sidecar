@@ -10,3 +10,4 @@ skills/*
 
 # Debug
 debug_output/
+.session_cache.json

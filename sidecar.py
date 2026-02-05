@@ -1,136 +1,99 @@
 import sys
-import importlib
 from core.config import settings
 from core.drivers.hotkeys import HotkeyManager
-from core.ingestion.screen import ScreenCapture, get_available_monitors
-from core.ingestion.audio import AudioIngest
-from core.intelligence.model import SidecarBrain
-from core.intelligence.skills import SkillManager
-from core.intelligence.events import SidecarEventType
+from core.ingestion.orchestrator import RecordingState
 from core.utils.system import kill_conflicting_instances
-from core.utils.setup import ensure_config
+from core.utils.session_manager import SessionManager
+from core.ui.stream_renderer import StreamRenderer
 from core.ui.cli import CLI
 
-# Global Components
+# Global Orchestration Context
 brain = None
 capture_tool = None
 skill_manager = None
 audio_ingest = None
+recorder = None
 processing_turn = False
 
 
-def handle_process_request():
-    global processing_turn
+def handle_pixel_request():
+    """Vector A Orchestration: Visual Context Analysis."""
+    global brain, capture_tool, audio_ingest, processing_turn
     if processing_turn: return
     processing_turn = True
     
     try:
-        # Vector A: Visual Turn [P]
+        # Legacy: Poll for transcription context if available
         audio_text = audio_ingest.poll_for_transcript(clear=False)
         
-        print("\n" + "-"*50)
-        print(" [ VECTOR A: VISUAL CAPTURE ]")
-        print("-"*50)
-        print("[i] Capturing Screen...", end="", flush=True)
+        print(f"\n{CLI.Fore.CYAN}{'='*60}")
+        print(f"{CLI.Fore.CYAN} [ VECTOR A: VISUAL CAPTURE ]")
+        print(f"{CLI.Fore.CYAN}{'='*60}\n")
+        print(f"{CLI.Fore.YELLOW}[i] Capturing Screen...{CLI.Style.RESET_ALL}", end="", flush=True)
         
         png_bytes = capture_tool.capture()
         if not png_bytes: 
-            print(" [!] Failed.")
+            print(f"{CLI.Fore.RED} [!] Failed.{CLI.Style.RESET_ALL}")
             return
 
-        print(f" ({brain.get_model_name()})\n [i] Analyzing...", end="\r", flush=True)
+        print(f" ({brain.get_model_name()})\n {CLI.Fore.YELLOW}[i] Analyzing...{CLI.Style.RESET_ALL}", end="\r", flush=True)
         stream = brain.analyze_image_stream(png_bytes, additional_text=audio_text)
-        _consume_stream(stream)
+        StreamRenderer.render(stream)
         
     finally:
         processing_turn = False
-        print("\n") # Section Gap
         CLI.print_ready()
 
 def handle_verbal_request():
-    global processing_turn
-    if processing_turn: return
-    processing_turn = True
+    """Vector B Orchestration: Stateful Verbal Context."""
+    global brain, recorder, processing_turn
     
+    # Block concurrent requests unless we are in the middle of a recording toggle
+    if processing_turn and not recorder.is_recording: 
+        return
+
     try:
-        # Vector B: Verbal Turn [T]
-        print("\n" + "-"*50)
-        print(" [ VECTOR B: VERBAL TURN ]")
-        print("-" * 50)
-        
-        # Read the externally managed transcription
-        audio_text = audio_ingest.poll_for_transcript(clear=True)
-        
-        if not audio_text:
-            print(f"\r[!] No verbal input detected in: {audio_ingest.transcript_path}")
+        new_state, audio_text = recorder.toggle()
+
+        if new_state == RecordingState.RECORDING:
+            print(f"\n{CLI.Fore.GREEN}{'='*60}")
+            print(f"{CLI.Fore.GREEN} [ VECTOR B: VERBAL TURN ]")
+            print(f"{CLI.Fore.GREEN}{'='*60}\n")
+            print(f"{CLI.Fore.RED}[●] RECORDING... {CLI.Fore.WHITE}(Press T to stop){CLI.Style.RESET_ALL}", end="\r", flush=True)
             return
 
-        print(f"\r[i] New Intent: \"{audio_text[:50]}...\"")
-        print(f" [i] Requesting follow-up from {brain.get_model_name()}...", end="\r", flush=True)
-        
-        stream = brain.analyze_verbal_stream(audio_text)
-        _consume_stream(stream)
-        
-    finally:
-        processing_turn = False
-        print("\n") # Section Gap
-        CLI.print_ready()
-
-def _consume_stream(stream):
-    """Consumes the AI stream and handles think/response formatting with First-Bite overprint."""
-    is_thinking = False
-    first_bite = True
-    
-    try:
-        for event in stream:
-            if event.event_type == SidecarEventType.TEXT_CHUNK:
-                if first_bite:
-                    # Clear the "Analyzing..." status and prep for response
-                    print(" " * 60, end="\r> ", flush=True)
-                    first_bite = False
-
-                if event.metadata.get("is_thought"):
-                    # Handle thinking blocks
-                    if not is_thinking:
-                        print("\n[THINKING]:", end=" ", flush=True)
-                        is_thinking = True
-                    print(event.content, end="", flush=True)
-                else:
-                    if is_thinking:
-                        print("\n\n[RESPONSE]:", end=" ", flush=True)
-                        is_thinking = False
-                    print(event.content or "", end="", flush=True)
-
-            elif event.event_type == SidecarEventType.ERROR:
-                if first_bite: 
-                    print(" " * 60, end="\r", flush=True)
-                print(f"\n[!] Error: {event.content}\n")
-                first_bite = False
-
-            elif event.event_type == SidecarEventType.STATUS:
-                # Status events update the handshake line but don't clear 'first_bite' 
-                # because we haven't started the response yet.
-                print(f"\r{' ' * 60}\r[i] {event.content}", end="", flush=True)
+        elif audio_text:
+            processing_turn = True
+            print(f"\r{CLI.Fore.GREEN}[i] New Intent: \"{audio_text[:50]}...\"{CLI.Style.RESET_ALL}")
+            print(f" {CLI.Fore.YELLOW}[i] Requesting follow-up from {brain.get_model_name()}...{CLI.Style.RESET_ALL}", end="\r", flush=True)
             
-    except Exception as e:
-        print(f"\n[!] Loop Error: {e}\n")
+            stream = brain.analyze_verbal_stream(audio_text)
+            StreamRenderer.render(stream)
+        
+        else:
+            print(f"\r{CLI.Fore.RED}[!] No verbal input detected or recognized.         {CLI.Style.RESET_ALL}")
+            
+    finally:
+        if recorder.is_idle:
+            processing_turn = False
+            CLI.print_ready()
 
 def handle_toggle_model():
     brain.toggle_model()
-    print(f"\n[i] Switched Model to: {brain.get_model_name()} (Chat Reset)")
+    print(f"\n{CLI.Fore.YELLOW}[i] Switched Model to: {CLI.Fore.WHITE}{brain.get_model_name()} {CLI.Fore.YELLOW}(Chat Reset){CLI.Style.RESET_ALL}")
     brain.init_chat()
     CLI.print_ready()
 
 def handle_switch_engine():
     msg = brain.switch_engine()
-    print(f"\n[i] {msg} ({brain.get_model_name()})")
+    print(f"\n{CLI.Fore.YELLOW}[i] {msg} ({brain.get_model_name()}){CLI.Style.RESET_ALL}")
     CLI.print_ready()
 
 def handle_skill_swap():
     skills = skill_manager.list_skills()
     selected = CLI.skill_pivot_menu(skills)
     if selected:
-        print(f"[i] Loading '{selected}'...")
+        print(f"{CLI.Fore.CYAN}[i] Loading '{selected}'...{CLI.Style.RESET_ALL}")
         data, placeholders = skill_manager.load_skill(selected)
         
         # Handle Placeholders during pivot
@@ -143,116 +106,42 @@ def handle_skill_swap():
         
         print("\n[SYSTEM]:", end=" ", flush=True)
         stream = brain.pivot_skill(data, prompt)
-        _consume_stream(stream)
+        StreamRenderer.render(stream)
             
-        print(f"\n### Skill Swapped to: {selected} ###")
         CLI.print_ready()
 
 
 def main():
-    # Component Initialization
+    global brain, capture_tool, recorder, skill_manager, audio_ingest
 
-    # 0. Display Branding
-    CLI.print_logo()
-
-    # 1. Config & Setup
-    if not settings.GOOGLE_API_KEY and not settings.GROQ_API_KEY:
-        if not ensure_config():
-            sys.exit(1)
-        importlib.reload(sys.modules['core.config.settings'])
-
-    # 2. Initialization
-    global capture_tool, audio_ingest, brain, skill_manager
-    skill_manager = SkillManager()
-    monitors = get_available_monitors()
+    # 1. Modular Bootstrap
+    session = SessionManager()
+    components = session.bootstrap()
     
-    # Always prompt for monitor for precise control (defaults to env-selected index in menu if possible)
-    monitor_idx = CLI.select_monitor_menu(monitors)
-    
-    capture_tool = ScreenCapture(monitor_idx)
-    audio_ingest = AudioIngest()
-    brain = SidecarBrain(settings.GOOGLE_API_KEY, settings.GROQ_API_KEY)
+    brain = components["brain"]
+    capture_tool = components["capture_tool"]
+    recorder = components["recorder"]
+    skill_manager = components["skill_manager"]
+    audio_ingest = components["audio_ingest"]
 
-    # 2.5 Engine Selection
-    # Get available engines based on API keys
-    available_engines = ["gemini"]
-    if settings.GROQ_API_KEY:
-        available_engines.append("groq")
-    
-    # Only prompt if there's more than one engine available
-    if len(available_engines) > 1:
-        engine_name = CLI.select_engine_menu(available_engines)
-        brain.set_active_engine(engine_name)
-
-    # 3. Boot Skills & Context
-    skill_name = CLI.select_skill_menu(skill_manager.list_skills())
-    
-    # Handle New Skill Creation
-    if skill_name == "NEW_SKILL":
-        name, identity, instructions, context = CLI.create_skill_wizard()
-        if name:
-            success = skill_manager.create_skill_files(name, identity, instructions, context)
-            if success:
-                print(f"[SUCCESS] Skill '{name}' created.")
-                skill_name = name
-            else:
-                print(f"[!] Skill folder '{name}' already exists.")
-                skill_name = "default"
-        else:
-            print("[!] Skill creation cancelled.")
-            skill_name = "default"
-        
-    data, placeholders = skill_manager.load_skill(skill_name)
-    
-    # Handle Placeholders
-    if placeholders:
-        replacements = CLI.prompt_for_variables(skill_name, placeholders)
-        for var, val in replacements.items():
-            data["context"] = data["context"].replace(f"{{{{{var}}}}}", val)
-
-    prompt = skill_manager.assemble_prompt(data)
-    brain.set_skill(data, prompt)
-
-    extra_ctx = CLI.session_context_prompt()
-    if extra_ctx:
-        data["context"] += f"\n\n## ADDITIONAL INTERACTIVE CONTEXT\n{extra_ctx}"
-        brain.set_skill(data, skill_manager.assemble_prompt(data))
-
-    # 4. Start Session
-    print("[i] Starting Chat Session...", end="", flush=True)
-    brain.init_chat()
-    print(" Ready.")
-    
-    CLI.print_welcome(monitor_idx, skill_name, brain.get_model_name())
-    CLI.print_ready()
-
-    # 5. Hotkeys
+    # 2. Hotkey Binding (Inter-component Wiring)
     hk_manager = HotkeyManager()
-    callbacks = {
-        1: handle_process_request, 
-        2: handle_toggle_model, 
-        3: handle_skill_swap,
-        4: handle_switch_engine,
-        5: handle_verbal_request
-    }
-    vks = {
-        1: settings.VK_P, 
-        2: settings.VK_M, 
-        3: settings.VK_S,
-        4: settings.VK_E,
-        5: settings.VK_T
+    mappings = {
+        settings.VK_P: handle_pixel_request,
+        settings.VK_M: handle_toggle_model,
+        settings.VK_S: handle_skill_swap,
+        settings.VK_E: handle_switch_engine,
+        settings.VK_T: handle_verbal_request
     }
 
     for attempt in range(2):
-        # Register Main Hotkeys (Shift+Ctrl+Alt)
-        success = all(hk_manager.register_hotkey(i, vks[i], callbacks[i]) for i in callbacks)
-        
+        success = all(hk_manager.register_hotkey(i, vk, cb) for i, (vk, cb) in enumerate(mappings.items()))
         if success: break
         hk_manager.unregister_all()
         if attempt == 0: kill_conflicting_instances()
-        else: print("[!] Error: Could not register hotkeys."); return
+        else: print(f"{CLI.Fore.RED}[!] Fatal Error: Could not register hotkeys.{CLI.Style.RESET_ALL}"); return
 
-    hk_manager.listen(exit_callback=lambda: print("\n[!] Shutting down..."))
+    hk_manager.listen(exit_callback=lambda: print(f"\n{CLI.Fore.YELLOW}[!] Shutting down Cockpit...{CLI.Style.RESET_ALL}"))
 
 if __name__ == "__main__":
     main()

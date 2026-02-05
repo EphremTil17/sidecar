@@ -8,9 +8,12 @@
 
 - **Modular Skill System:** Folder-based agent architecture with triple-layer prompting (Identity, Instructions, Context).
 - **Dual-Vector Push Architecture:** Bypasses unreliable agentic tool-calling with direct context injection (Vector A: Visual, Vector B: Verbal).
+- **Automated Verbal Pulse (v3.0):** High-speed, zero-latency speech-to-text pipeline with stateful "Start-Stop" recording.
+- **Session Persistence:** "Zero-Touch" restoration of your cockpit configuration (Monitor, Mic, Engine, Skill).
+- **Fast-Boot Sequence:** Get to **READY** state in <3 seconds without manual configuration.
 - **Prompt Pivoting:** Hot-swap personas mid-session while maintaining full conversational history and state.
 - **Conversational Transcription:** Spoken words act as the "most recent turn" in the conversation flow.
-- **Extreme Speed Engine:** Groq Engine integration for sub-second reasoning using **Llama 4 Maverick**.
+- **Extreme Speed Engine:** Groq Engine integration for sub-second reasoning and transcription using **Whisper-large-v3-turbo**.
 
 ---
 
@@ -37,9 +40,9 @@ The project follows a modular Strategy Pattern designed for low-latency context 
 
 - **Core Config**: Handles `.env` parsing and resolves absolute paths for project-wide assets.
 - **Drivers**: Manages low-level `pywin32` hooks to ensure hotkeys work globally across applications.
-- **Ingestion**: Handles Vector A (Pixel) via high-speed screen capture and Vector B (Talk) by polling external transcription streams. Uses in-place truncation to ensure `transcription.txt` stability for external watchers.
-- **Intelligence**: The brain of the system. Manages state, chat history, and routes context to the active engine. Implements **Context Bloat Protection** by automatically pruning images in multi-turn conversations.
-- **Engines**: Deeply optimized implementations for streaming text and images to LLMs using a unified event-driven model.
+- **Ingestion**: Handles Vector A (Pixel) via high-speed screen capture and Vector B (Talk) via a stateful `AudioSensor`. Direct-to-RAM recording using `sounddevice` ensures zero disk I/O and sub-300ms latency.
+- **Intelligence**: The brain of the system. Manages state, chat history, and routes context to the active engine. Includes the `GroqTranscriptionEngine` for ultra-fast STT. Implements **Context Bloat Protection** by automatically pruning images in multi-turn conversations.
+- **Engines**: Deeply optimized implementations for streaming text, images, and audio transcriptions using a unified event-driven model.
 - **Skills**: A file-based system allowing users to define specialized agents (e.g., Coding, Debugging, Writing) that can be swapped mid-session.
 - **UI & Utils**: Provides a premium terminal experience with a specialized status HUD and critical system utilities for environment setup.
 
@@ -52,16 +55,19 @@ The project follows a modular Strategy Pattern designed for low-latency context 
 | Key   | Vector      | Action        | Context Type                          |
 | :---- | :---------- | :------------ | :------------------------------------ |
 | **P** | **[P]ixel** | Analyze View  | Screenshot + Persistent Transcription |
-| **T** | **[T]alk**  | Verbal Turn   | Transcription Follow-up (No Vision)   |
+| **T** | **[T]alk**  | Record Toggle | Transcription Follow-up (No Vision)   |
 | **E** | **Engine**  | Switch Engine | Toggle between Gemini and Groq        |
 | **S** | **Skill**   | Swap Skill    | Pivot model identity/instructions     |
 | **M** | **Model**   | Toggle Model  | Toggle Fast/Deep models (Gemini)      |
 
 ## Transcription & Philosophy: The Conversational 'Now'
 
-The **Transcription Guideline** is the **Current Moment** of the conversation.
+The **Transcription Guideline** is the **Current Moment** of the conversation. SidecarAI v3.0 introduces a high-speed "Pulse" architecture that captures raw hardware audio directly to RAM.
 
-- **Persistent Context**: [P]ixel captures include the transcription from your last communication as your "Current Guideline".
+- **Stateful Recording**: Press `T` to begin recording (`[●] RECORDING...`). Press `T` again to finalize and push.
+- **Zero-Latency Processing**: Audio is processed in memory and sent to Groq's `whisper-large-v3-turbo` model for near-instant transcription.
+- **Shared Access**: Built on `sounddevice` (WASAPI), allowing Sidecar to maintain microphone access even if you are in a Zoom or Teams call.
+- **Persistent Context**: [P]ixel captures include the transcription from your last communication as your "Current Guideline" (remains backward compatible with `transcription.txt` polling if enabled).
 - **Active Intent**: [T]alk turns make the transcription the "Last Word" in the dialogue.
 - **Verbal Interaction Protocol**: All follow-ups adhere to a "Pair-Programming Script" style—conversational, technical, and focused on concise bullet points.
 - **Conversational Intelligence**: The model treats transcription as the "now" of the dialogue. If you end with a question, it answers. If you voice a mistake, it corrects it.
@@ -90,15 +96,16 @@ If keys are missing, the system will interactively guide you through the setup.
 
 #### Advanced Configuration (`.env`)
 
-| Key                  | Description                                                         | Default               |
-| -------------------- | ------------------------------------------------------------------- | --------------------- |
-| `SIDECAR_ENGINE`     | Default engine (gemini, groq)                                       | `gemini`              |
-| `GOOGLE_API_KEY`     | Your Google Gemini API Key                                          | Optional              |
-| `MODEL_FLASH/PRO`    | Your Google Gemini Flash/Pro model names                            | Optional              |
-| `GROQ_API_KEY`       | Your Groq API Key                                                   | Optional              |
-| `GROQ_MODEL`         | The Maverick model for high speed                                   | `llama-4-maverick...` |
-| `PROJECT_ROOT`       | The base directory for the **Workspace Scanner**.                   | `.`                   |
-| `TRANSCRIPTION_PATH` | Path to the text file where your meeting transcriptions are stored. | `transcription.txt`   |
+| Key                  | Description                                          | Default                  |
+| -------------------- | ---------------------------------------------------- | ------------------------ |
+| `SIDECAR_ENGINE`     | Default engine (gemini, groq)                        | `gemini`                 |
+| `GOOGLE_API_KEY`     | Your Google Gemini API Key                           | Optional                 |
+| `MODEL_FLASH/PRO`    | Your Google Gemini Flash/Pro model names             | Optional                 |
+| `GROQ_API_KEY`       | Your Groq API Key                                    | Optional                 |
+| `GROQ_MODEL`         | The Maverick model for high speed                    | `llama-4-maverick...`    |
+| `GROQ_STT_MODEL`     | Groq model for ultra-fast STT                        | `whisper-large-v3-turbo` |
+| `PROJECT_ROOT`       | The base directory for the **Workspace Scanner**.    | `.`                      |
+| `TRANSCRIPTION_PATH` | Path to the text file (Legacy support for Vector P). | `transcription.txt`      |
 
 ## Technology Stack
 
