@@ -1,4 +1,3 @@
-import io
 from core.config import settings
 from core.intelligence.engines.gemini import GeminiEngine
 from core.intelligence.engines.groq_engine import GroqEngine
@@ -72,16 +71,15 @@ class SidecarBrain:
             return
 
         # Prepare follow-up message
-        self.active_engine.messages.append({
-            "role": "user",
-            "content": f"[CONVERSATION TURN]: {transcription}"
-        })
+        self.active_engine.add_user_message(f"[CONVERSATION TURN]: {transcription}")
         
-        # Groq engine can use the existing _execute_chat_completion logic if we expose it or use stream_analysis with None for image
+        # Groq engine can use the existing _execute_chat_completion logic
         if hasattr(self.active_engine, '_execute_chat_completion'):
              yield from self.active_engine._execute_chat_completion()
         else:
-            # Fallback for Gemini or other engines
+            # Fallback for Gemini: stream_analysis(None, transcription) already appends context
+            # We don't want to double-append, but add_user_message for Gemini is currently a no-op
+            # so this is safe.
             yield from self.active_engine.stream_analysis(None, transcription)
 
     def pivot_skill(self, skill_data: dict, assembled_prompt: str):

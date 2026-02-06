@@ -3,7 +3,6 @@ import importlib
 import sounddevice as sd
 from core.config import settings
 from core.ingestion.screen import ScreenCapture, get_available_monitors
-from core.ingestion.audio import AudioIngest
 from core.ingestion.audio_sensor import AudioSensor
 from core.ingestion.orchestrator import RecordingOrchestrator
 from core.intelligence.model import SidecarBrain
@@ -11,10 +10,6 @@ from core.intelligence.transcription_service import TranscriptionService
 from core.intelligence.skills import SkillManager
 from core.utils.setup import ensure_config
 from core.utils.audio import get_wasapi_input_devices
-from core.utils.session_cache import SessionCache
-from core.ui.cli import CLI
-
-from core.utils.setup import ensure_config
 from core.utils.session_cache import SessionCache
 from core.utils.hardware_director import HardwareDirector
 from core.utils.knowledge_director import KnowledgeDirector
@@ -34,7 +29,6 @@ class SessionManager:
         self.brain = None
         self.capture_tool = None
         self.recorder = None
-        self.audio_ingest = None # Legacy
         self.sensor = None
         
         self._state = {
@@ -43,7 +37,8 @@ class SessionManager:
             "engine_name": settings.SIDECAR_ENGINE,
             "skill_name": "default",
             "skill_placeholders": {},
-            "session_context": ""
+            "session_context": "",
+            "overlay_geometry": None # [x, y, w, h]
         }
 
     def bootstrap(self) -> dict:
@@ -71,8 +66,7 @@ class SessionManager:
             "brain": self.brain,
             "capture_tool": self.capture_tool,
             "recorder": self.recorder,
-            "skill_manager": self.skill_manager,
-            "audio_ingest": self.audio_ingest
+            "skill_manager": self.skill_manager
         }
 
     def _attempt_fast_boot(self, cache: dict) -> bool:
@@ -138,7 +132,6 @@ class SessionManager:
         self.brain = SidecarBrain(settings.GOOGLE_API_KEY, settings.GROQ_API_KEY)
         self.transcription_service = TranscriptionService(settings.GROQ_API_KEY)
         self.capture_tool = ScreenCapture(self._state["monitor_index"])
-        self.audio_ingest = AudioIngest()
         self.sensor = AudioSensor()
         self.recorder = RecordingOrchestrator(self.sensor, self.transcription_service)
 
@@ -147,6 +140,8 @@ class SessionManager:
         if settings.GROQ_API_KEY: available.append("groq")
         return CLI.select_engine_menu(available) if len(available) > 1 else available[0]
 
-    def _commit_session(self):
+    def _commit_session(self, overlay_geometry=None):
         """Saves current state to persistence layer."""
+        if overlay_geometry:
+            self._state["overlay_geometry"] = overlay_geometry
         SessionCache.save(self._state)

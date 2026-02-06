@@ -91,3 +91,9 @@ Please acknowledge you have absorbed these new instructions."""
         self.use_pro_model = not self.use_pro_model
         self.init_session(self.current_system_prompt)
         return self.use_pro_model
+
+    def add_user_message(self, content: str):
+        # The Gemini chat session manages history automatically when send_message is called.
+        # If we need to inject history without a response, we'd manually update session.history.
+        # But for Sidecar, we usually want the response immediately after transcription.
+        pass

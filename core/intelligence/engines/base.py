@@ -27,3 +27,8 @@ class BaseEngine(ABC):
     def toggle_model(self):
         """Toggles between fast and deep models if applicable."""
         pass
+
+    @abstractmethod
+    def add_user_message(self, content: str):
+        """Adds a user message to the session history."""
+        pass

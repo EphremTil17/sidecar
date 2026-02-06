@@ -16,6 +16,9 @@ class GroqEngine(BaseEngine):
     def init_session(self, system_prompt):
         self.system_prompt = system_prompt
         self.messages = [{"role": "system", "content": self.system_prompt}]
+        
+    def add_user_message(self, content: str):
+        self.messages.append({"role": "user", "content": content})
 
     def stream_analysis(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
         user_content = []
@@ -42,7 +45,8 @@ class GroqEngine(BaseEngine):
         self.messages.append({"role": "user", "content": user_content})
         
         if settings.SAVE_DEBUG_SNAPSHOTS:
-            print(f"\n[DEBUG] Sending {len(self.messages)} messages to Groq. (Last content size: {len(str(user_content))})")
+            from core.utils.logger import logger
+            logger.debug(f"Sending {len(self.messages)} messages to Groq. (Last content size: {len(str(user_content))})")
 
         # Context Bloat Protection: Blind previous images to save tokens
         scrubbed_messages = []

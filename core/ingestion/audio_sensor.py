@@ -35,6 +35,7 @@ class AudioSensor:
 
         self._buffer = []
         
+        from core.utils.logger import logger
         try:
             # Attempt 1: Configured/Preferred Rate
             self.stream = sd.InputStream(
@@ -44,6 +45,7 @@ class AudioSensor:
                 callback=self._callback
             )
             self.actual_sample_rate = self.sample_rate
+            logger.success(f"Audio Stream Active: [{sd.default.device[0]}] {sd.query_devices(sd.default.device[0], 'input')['name']} | WASAPI ({self.sample_rate}Hz)")
         except Exception:
             # Attempt 2: Device native default (Final Fallback)
             try:
@@ -57,9 +59,10 @@ class AudioSensor:
                     callback=self._callback
                 )
                 self.actual_sample_rate = native_rate
-                print(f"[i] Audio Sensor: Hardware rejected {self.sample_rate}Hz. Using device default: {native_rate}Hz.")
+                logger.warning(f"Audio Hardware rejected {self.sample_rate}Hz. Using native: {native_rate}Hz.")
+                logger.success(f"Audio Stream Active: [{sd.default.device[0]}] {device_info['name']} | WASAPI ({native_rate}Hz)")
             except Exception as e:
-                print(f"[!] Audio Sensor Error: Could not open microphone even at native rate. {e}")
+                logger.error(f"Audio Sensor Failure: Could not open microphone. {e}")
                 raise e
 
         self.stream.start()
