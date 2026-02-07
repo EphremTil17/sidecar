@@ -1,76 +1,86 @@
 import sys
-import io
+import threading
 from typing import Callable
-from threading import Lock
 
 class StdoutCapture:
     """
-    Thread-safe stdout/stderr capture that redirects output to a callback.
-    Preserves original stdout for error handling and debugging.
+    Thread-safe stdout/stderr capture bridge for UI redirection.
+    
+    HARDENING NOTE:
+    Redirecting stdout to a GUI signal is dangerous because a logging call
+    during signal emission can trigger another stdout write, leading to 
+    infinite recursion and a stack overflow crash.
+    
+    The implementation uses:
+    1. A thread-local recursion guard ('in_write' flag).
+    2. A Recursive Lock (RLock) for multi-threaded safety.
+    3. Fast-path writing to the original stream to ensure console logs 
+       are never lost even if the GUI bridge fails.
     """
     
     def __init__(self, callback: Callable[[str], None]):
-        """
-        Initialize stdout capture.
-        
-        Args:
-            callback: Function to call with captured text
-        """
         self.callback = callback
         self._original_stdout = sys.stdout
         self._original_stderr = sys.stderr
-        self._lock = Lock()
+        self._lock = threading.RLock()
+        self._local = threading.local() # Per-thread recursion state
         self._active = False
         
     def start(self):
-        """Start capturing stdout and stderr."""
-        if self._active:
+        """Hijack sys.stdout and sys.stderr with our hardened proxy."""
+        if self._active: 
             return
-            
-        sys.stdout = self._CaptureStream(self.callback, self._original_stdout, self._lock)
-        sys.stderr = self._CaptureStream(self.callback, self._original_stderr, self._lock)
+        sys.stdout = self._CaptureStream(self.callback, self._original_stdout, self._lock, self._local)
+        sys.stderr = self._CaptureStream(self.callback, self._original_stderr, self._lock, self._local)
         self._active = True
         
     def stop(self):
-        """Restore original stdout and stderr."""
-        if not self._active:
+        """Restore original system streams."""
+        if not self._active: 
             return
-            
         sys.stdout = self._original_stdout
         sys.stderr = self._original_stderr
         self._active = False
         
-    class _CaptureStream(io.TextIOBase):
-        """Internal stream wrapper that captures writes."""
-        
-        def __init__(self, callback: Callable[[str], None], original_stream, lock: Lock):
+    class _CaptureStream:
+        """Lightweight proxy that forwards output to the UI and original stream."""
+        def __init__(self, callback, original, lock, local_storage):
             self.callback = callback
-            self.original_stream = original_stream
+            self.original = original
             self.lock = lock
+            self.local = local_storage
             
         def write(self, text: str) -> int:
-            """Write text to both callback and original stream."""
-            if text:
-                with self.lock:
-                    # Send to callback (ghost terminal)
-                    try:
+            if not text: 
+                return 0
+            
+            # Phase 1: Direct path to original console (Essential for stability)
+            try:
+                self.original.write(text)
+                self.original.flush()
+            except Exception:
+                pass
+                
+            # Phase 2: Redirect to UI (with Recursion Guard)
+            # We only emit the signal if we aren't already processing a write from this thread.
+            if not getattr(self.local, 'in_write', False):
+                self.local.in_write = True
+                try:
+                    with self.lock:
                         self.callback(text)
-                    except Exception:
-                        # Silently fail if callback errors (don't break logging)
-                        pass
-                    
-                    # Also write to original stream (for debugging)
-                    try:
-                        self.original_stream.write(text)
-                        self.original_stream.flush()
-                    except Exception:
-                        pass
-                        
+                except Exception:
+                    pass # Error in UI callback should not break the logger
+                finally:
+                    self.local.in_write = False
+            
             return len(text)
             
         def flush(self):
-            """Flush the original stream."""
             try:
-                self.original_stream.flush()
+                self.original.flush()
             except Exception:
                 pass
+                
+        def __getattr__(self, name):
+            """Proxy all other stream attributes (encoding, buffer, etc.) to original."""
+            return getattr(self.original, name)

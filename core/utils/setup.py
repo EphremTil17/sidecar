@@ -3,27 +3,25 @@ from dotenv import load_dotenv
 
 def ensure_config():
     """
-    Validates existence of .env and keys.
-    If missing, prompts user and creates the file with comprehensive defaults.
+    Validates existence of the environment configuration and API keys.
+    If missing, initiates an interactive setup and generates a healthy .env file.
     """
     env_path = ".env"
-    template_path = ".env.template"
     
-    # 1. Check existing .env
+    # 1. Immediate validation of existing configuration
     if os.path.exists(env_path):
         load_dotenv(env_path, override=True)
-        # We check for at least one valid key to consider setup "done", 
-        # but the app might still error if the active engine key is missing.
-        if (os.getenv("GOOGLE_API_KEY") and os.getenv("GOOGLE_API_KEY").startswith("AIza")) or \
-           (os.getenv("GROQ_API_KEY") and os.getenv("GROQ_API_KEY").startswith("gsk_")):
+        # We allow either a Google or Groq key to proceed.
+        # Strict prefix checks (e.g., 'AIza') were removed to support varying key formats.
+        if os.getenv("GOOGLE_API_KEY") or os.getenv("GROQ_API_KEY"):
             return True
     
-    # 2. Setup Prompt
+    # 2. Interactive Setup Wizard
     print("\n" + "="*50)
     print("### SIDECAR AI: INITIAL SETUP ###")
     print("="*50)
-    print("It looks like your configuration is missing or invalid.")
-    print("Sidecar now supports dual engines: Gemini (Google) and Maverick (Groq).")
+    print("Configuration missing or invalid. Let's initialize your environment.")
+    print("Sidecar supports dual engines: Gemini (Google) and Maverick (Groq).")
     
     print("\n[1] Enter Google API Key (Optional, for deep reasoning): ", end="")
     google_key = input().strip()
@@ -32,56 +30,60 @@ def ensure_config():
     groq_key = input().strip()
     
     if not google_key and not groq_key:
-        print("[!] Error: You must provide at least one API key (Google or Groq).")
+        print("[!] Error: You must provide at least one API key.")
         return False
         
-    # 3. Preferences
+    # 3. Derive Intelligent Defaults
     default_engine = "gemini" if google_key else "groq"
-    print(f"\n[i] Setting default engine to: {default_engine}")
+    
+    # 4. Environment Template Construction
+    # We use a clean, structured set of defaults to ensure the app boots successfully.
+    env_content = f"""# --- Application Identification ---
+SIDECAR_ENGINE={default_engine}
 
-    # 4. Generate .env content
-    # If template exists, we try to be smart, otherwise use structured defaults
-    env_lines = [
-        "# --- Application Preferences ---",
-        f"SIDECAR_ENGINE={default_engine}",
-        "",
-        "# --- API Configuration ---",
-        f"GOOGLE_API_KEY={google_key}",
-        f"GROQ_API_KEY={groq_key}",
-        "",
-        "# --- Screen Capture Configuration ---",
-        "SIDECAR_MONITOR_INDEX=1",
-        "SIDECAR_CROP_TOP=120",
-        "SIDECAR_CROP_BOTTOM=40",
-        "SIDECAR_CROP_LEFT=0",
-        "SIDECAR_CROP_RIGHT=0",
-        "",
-        "# --- Hotkey Configuration ---",
-        "HOTKEY_PROCESS=P",
-        "HOTKEY_MODEL_TOGGLE=M",
-        "HOTKEY_SKILL_SWAP=S",
-        "",
-        "# --- Intelligence Configuration ---",
-        "MODEL_FLASH=models/gemini-3-flash-preview",
-        "MODEL_PRO=models/gemini-3-pro-preview",
-        "GROQ_MODEL=meta-llama/llama-4-maverick-17b-128e-instruct",
-        "SIDECAR_THINKING_LEVEL=high",
-        "",
-        "# --- Debug Configuration ---",
-        "SIDECAR_DEBUG=False"
-    ]
+# --- API Configuration ---
+GOOGLE_API_KEY={google_key}
+GROQ_API_KEY={groq_key}
+
+# --- Screen Capture Configuration ---
+# Standard 16:9 monitor safe-zones
+SIDECAR_MONITOR_INDEX=1
+SIDECAR_CROP_TOP=120
+SIDECAR_CROP_BOTTOM=40
+SIDECAR_CROP_LEFT=0
+SIDECAR_CROP_RIGHT=0
+
+# --- Hotkey Configuration (VK Codes) ---
+# Primary interface hotkeys
+HOTKEY_PROCESS=P
+HOTKEY_MODEL_TOGGLE=M
+HOTKEY_SKILL_SWAP=S
+
+# --- Intelligence Model Configuration ---
+MODEL_FLASH=models/gemini-3-flash-preview
+MODEL_PRO=models/gemini-3-pro-preview
+GROQ_MODEL=meta-llama/llama-4-maverick-17b-128e-instruct
+
+# --- Visual Preferences ---
+GHOST_OPACITY=0.78
+GHOST_FONT_SIZE=10
+GHOST_FONT_FAMILY=Consolas
+
+# --- Troubleshooting ---
+SIDECAR_DEBUG=False
+"""
 
     try:
         with open(env_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(env_lines) + "\n")
+            f.write(env_content.strip() + "\n")
         
-        print(f"\n[SUCCESS] Configuration saved to {env_path}")
-        print("[i] Initializing session...")
+        print(f"\n[SUCCESS] Environment serialized to {env_path}")
+        print("[i] Rebooting with persistent session...")
         print("="*50 + "\n")
         
-        # Reload immediately for current process
+        # Load the newly created environment for immediate use
         load_dotenv(env_path, override=True)
         return True
     except Exception as e:
-        print(f"[!] Critical Error writing .env: {e}")
+        print(f"[!] File System Error: Unable to write .env: {e}")
         return False

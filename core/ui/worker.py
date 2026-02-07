@@ -4,15 +4,14 @@ from core.intelligence.events import SidecarEventType
 from core.ingestion.orchestrator import RecordingState
 from core.utils.logger import logger
 
-
 class SidecarWorker(QThread):
     """
-    Background worker that runs the SidecarAI logic.
-    Decouples AI processing from the GUI main thread.
+    Background worker that runs the SidecarAI processing logic.
+    Decouples intensive AI analysis from the GUI main thread to prevent UI freezing.
     """
-    signal_chunk_update = pyqtSignal(str, str)  # Incremental chunk (text, vector)
-    signal_status_update = pyqtSignal(str)      # Status messages
-    signal_recording_toggle = pyqtSignal(bool)  # Recording state changed
+    signal_chunk_update = pyqtSignal(str, str)  # Stream text chunks to UI
+    signal_status_update = pyqtSignal(str)      # Update UI status text
+    signal_recording_toggle = pyqtSignal(bool)  # Sync recording UI state
 
     def __init__(self, components: dict):
         super().__init__()
@@ -23,7 +22,7 @@ class SidecarWorker(QThread):
         self.processing_turn = False
 
     def handle_pixel_request(self):
-        """Vector P: Pure screen capture and analysis."""
+        """Vector P: Triggers screen capture and vision-based analysis."""
         if self.processing_turn:
             return
         self.processing_turn = True
@@ -49,17 +48,17 @@ class SidecarWorker(QThread):
                     self.signal_chunk_update.emit(f"\n[!] Error: {event.content}\n", "a")
             
             print("\n")
-            logger.success("Vector A sequence complete.")
+            logger.success("Vision Analysis Complete.")
             
         except Exception as e:
-            logger.error(f"Vector A Error: {e}")
+            logger.error(f"Vector A Exception: {e}")
             self.signal_chunk_update.emit(f"\n[!] Error: {str(e)}\n", "a")
         finally:
             self.processing_turn = False
             self.signal_status_update.emit("READY")
 
     def handle_verbal_request(self):
-        """Vector T: Voice recording and transcription analysis."""
+        """Vector T: Manages audio state (Start/Stop) and triggers transcription analysis."""
         if self.processing_turn and not self.recorder.is_recording:
             return
 
@@ -89,12 +88,12 @@ class SidecarWorker(QThread):
                         self.signal_chunk_update.emit(f"\n[!] Error: {event.content}\n", "b")
                 
                 print("\n")
-                logger.success("Vector B sequence complete.")
+                logger.success("Verbal Analysis Complete.")
             else:
                 self.signal_status_update.emit("No input detected.")
                 
         except Exception as e:
-            logger.error(f"Vector B Error: {e}")
+            logger.error(f"Vector B Exception: {e}")
             self.signal_chunk_update.emit(f"\n[!] Error: {str(e)}\n", "b")
         finally:
             if self.recorder.is_idle:
@@ -102,6 +101,6 @@ class SidecarWorker(QThread):
                 self.signal_status_update.emit("READY")
 
     def run(self):
-        """QThread execution loop for event processing."""
-        logger.info("Sidecar Worker thread started.")
+        """Main event loop for the worker thread."""
+        logger.info("Sidecar Worker thread active.")
         self.exec()
