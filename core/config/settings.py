@@ -100,3 +100,4 @@ GHOST_FONT_FAMILY = os.getenv("GHOST_FONT_FAMILY", "Consolas")
 
 # --- Debug Configuration ---
 SAVE_DEBUG_SNAPSHOTS = os.getenv("SIDECAR_DEBUG", "False").lower() == "true"
+DEBUG_DIR = os.path.join(PROJECT_ROOT, "debug_snapshots")

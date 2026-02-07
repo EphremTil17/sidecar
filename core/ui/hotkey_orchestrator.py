@@ -56,22 +56,25 @@ class HotkeyOrchestrator:
 
     def dispatch(self, hk_id: int):
         """Dispatched from the UI thread to trigger safe cross-thread actions."""
-        logger.debug(f"Hotkey event: {hk_id}")
         
         # 1. Primary AI Analysis Vectors
         if hk_id == HK_ID_PIXEL:
+            logger.debug(f"Hotkey event: Pixel ({hk_id})")
             self.worker.handle_pixel_request()
             return
         elif hk_id == HK_ID_TALK:
+            logger.debug(f"Hotkey event: Talk ({hk_id})")
             self.worker.handle_verbal_request()
             return
             
         # 2. Intelligence State Management
         elif hk_id == HK_ID_MODEL:
+            logger.debug(f"Hotkey event: Model Toggle ({hk_id})")
             self.worker.brain.toggle_model()
             logger.info(f"Active model: {self.worker.brain.get_model_name()}")
             return
         elif hk_id == HK_ID_ENGINE:
+            logger.debug(f"Hotkey event: Engine Switch ({hk_id})")
             msg = self.worker.brain.switch_engine()
             logger.info(msg)
             return

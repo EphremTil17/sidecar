@@ -88,9 +88,25 @@ The **Transcription Guideline** is the **Current Moment** of the conversation. S
 # Install dependencies
 .\.venv\Scripts\pip install -r requirements.txt
 
-# Run the Sidecar
+# Run the Sidecar in standard mode
 $env:PYTHONPATH="."; .\.venv\Scripts\python.exe sidecar.py
+
+# Run with the Transparent Ghost Overlay
+$env:PYTHONPATH="."; .\.venv\Scripts\python.exe sidecar.py --ghost
+
+# Run with Screenshot Debugging (saves captures to /debug_snapshots)
+$env:PYTHONPATH="."; .\.venv\Scripts\python.exe sidecar.py --debug
 ```
+
+### 3. Special Execution Modes
+
+#### **Ghost Mode (`--ghost`)**
+
+Launches a transparent, always-on-top terminal overlay. This window is **invisible to screen capture** (e.g., Zoom, Teams, or regular screenshots) via the Win32 `SetWindowDisplayAffinity` protocol. You can move, resize, and scroll it via hotkeys or the minimalist scrollbar on the far right.
+
+#### **Debug Mode (`--debug`)**
+
+Enables the **Screenshot Debug Tool**. Every time you trigger a `[P]ixel` request, the raw image sent to the AI is saved in a project-root folder called `debug_snapshots/`. Use this to verify your monitor index and crop margins.
 
 If keys are missing, the system will interactively guide you through the setup.
 
