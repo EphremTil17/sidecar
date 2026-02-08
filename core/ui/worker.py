@@ -1,5 +1,4 @@
-from PyQt6.QtCore import QThread, pyqtSignal
-from core.intelligence.model import SidecarBrain
+from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
 from core.intelligence.events import SidecarEventType
 from core.ingestion.orchestrator import RecordingState
 from core.utils.logger import logger
@@ -19,15 +18,21 @@ class SidecarWorker(QThread):
         self.capture_tool = components["capture_tool"]
         self.recorder = components["recorder"]
         self.skill_manager = components["skill_manager"]
+        
+        # Thread Safety: Use a mutex to prevent race conditions on processing turns
+        self._lock = QMutex()
         self.processing_turn = False
 
     def handle_pixel_request(self):
         """Vector P: Triggers screen capture and vision-based analysis."""
-        if self.processing_turn:
-            return
-        self.processing_turn = True
+        with QMutexLocker(self._lock):
+            if self.processing_turn:
+                return
+            self.processing_turn = True
         
         try:
+            import time
+            start_time = time.time()
             self.signal_status_update.emit("Capturing screen...")
             
             png_bytes = self.capture_tool.capture()
@@ -38,8 +43,13 @@ class SidecarWorker(QThread):
             self.signal_status_update.emit(f"Analyzing view ({self.brain.get_model_name()})...")
             stream = self.brain.analyze_image_stream(png_bytes)
             
+            first_chunk = True
             for event in stream:
                 if event.event_type == SidecarEventType.TEXT_CHUNK and event.content:
+                    if first_chunk:
+                        latency = time.time() - start_time
+                        self.signal_status_update.emit(f"Latency: {latency:.2f}s | Response Streaming...")
+                        first_chunk = False
                     self.signal_chunk_update.emit(event.content, "a")
                 elif event.event_type == SidecarEventType.STATUS:
                     self.signal_status_update.emit(event.content)
@@ -48,19 +58,22 @@ class SidecarWorker(QThread):
                     self.signal_chunk_update.emit(f"\n[!] Error: {event.content}\n", "a")
             
             print("\n")
-            logger.success("Vision Analysis Complete.")
+            total_time = time.time() - start_time
+            logger.success(f"Vision Analysis Complete. (Total: {total_time:.2f}s)")
             
         except Exception as e:
             logger.error(f"Vector A Exception: {e}")
             self.signal_chunk_update.emit(f"\n[!] Error: {str(e)}\n", "a")
         finally:
-            self.processing_turn = False
+            with QMutexLocker(self._lock):
+                self.processing_turn = False
             self.signal_status_update.emit("READY")
 
     def handle_verbal_request(self):
         """Vector T: Manages audio state (Start/Stop) and triggers transcription analysis."""
-        if self.processing_turn and not self.recorder.is_recording:
-            return
+        with QMutexLocker(self._lock):
+            if self.processing_turn and not self.recorder.is_recording:
+                return
 
         try:
             new_state, audio_text = self.recorder.toggle()
@@ -73,13 +86,21 @@ class SidecarWorker(QThread):
             self.signal_recording_toggle.emit(False)
             
             if audio_text:
-                self.processing_turn = True
+                import time
+                start_time = time.time()
+                with QMutexLocker(self._lock):
+                    self.processing_turn = True
                 self.signal_status_update.emit(f"Processing Intent: {audio_text[:30]}...")
                 
                 stream = self.brain.analyze_verbal_stream(audio_text)
                 
+                first_chunk = True
                 for event in stream:
                     if event.event_type == SidecarEventType.TEXT_CHUNK and event.content:
+                        if first_chunk:
+                            latency = time.time() - start_time
+                            self.signal_status_update.emit(f"Latency: {latency:.2f}s | Response Streaming...")
+                            first_chunk = False
                         self.signal_chunk_update.emit(event.content, "b")
                     elif event.event_type == SidecarEventType.STATUS:
                         self.signal_status_update.emit(event.content)
@@ -88,7 +109,8 @@ class SidecarWorker(QThread):
                         self.signal_chunk_update.emit(f"\n[!] Error: {event.content}\n", "b")
                 
                 print("\n")
-                logger.success("Verbal Analysis Complete.")
+                total_time = time.time() - start_time
+                logger.success(f"Verbal Analysis Complete. (Total: {total_time:.2f}s)")
             else:
                 self.signal_status_update.emit("No input detected.")
                 
@@ -97,7 +119,8 @@ class SidecarWorker(QThread):
             self.signal_chunk_update.emit(f"\n[!] Error: {str(e)}\n", "b")
         finally:
             if self.recorder.is_idle:
-                self.processing_turn = False
+                with QMutexLocker(self._lock):
+                    self.processing_turn = False
                 self.signal_status_update.emit("READY")
 
     def run(self):

@@ -1,6 +1,5 @@
 import sys
 import importlib
-import sounddevice as sd
 from core.config import settings
 from core.ingestion.screen import ScreenCapture, get_available_monitors
 from core.ingestion.audio_sensor import AudioSensor
@@ -9,7 +8,6 @@ from core.intelligence.model import SidecarBrain
 from core.intelligence.transcription_service import TranscriptionService
 from core.intelligence.skills import SkillManager
 from core.utils.setup import ensure_config
-from core.utils.audio import get_wasapi_input_devices
 from core.utils.session_cache import SessionCache
 from core.utils.hardware_director import HardwareDirector
 from core.utils.knowledge_director import KnowledgeDirector
@@ -57,7 +55,7 @@ class SessionManager:
         self.brain.init_chat()
         print(" Ready.")
         
-        self._commit_session()
+        self.commit()
         
         CLI.print_welcome(self._state["monitor_index"], self._state["skill_name"], self.brain.get_model_name())
         CLI.print_ready()
@@ -87,6 +85,7 @@ class SessionManager:
             self.hardware.apply_settings(self._state["monitor_index"], self._state["audio_device_id"])
             
             self._init_core_engines()
+            self.brain.set_active_engine(self._state["engine_name"])
             
             # Restore Skill
             data, prompt = self.knowledge.restore_skill(
@@ -105,7 +104,7 @@ class SessionManager:
         """Standard interactive setup."""
         if not settings.GOOGLE_API_KEY and not settings.GROQ_API_KEY:
             if not ensure_config(): sys.exit(1)
-            importlib.reload(sys.modules['core.config.settings'])
+            importlib.reload(settings)
 
         # Hardware
         mon_idx, audio_id = self.hardware.select_hardware()
@@ -138,10 +137,18 @@ class SessionManager:
     def _setup_engine_choice(self):
         available = ["gemini"]
         if settings.GROQ_API_KEY: available.append("groq")
+        if settings.FIREWORKS_API_KEY: available.append("fireworks")
         return CLI.select_engine_menu(available) if len(available) > 1 else available[0]
 
-    def _commit_session(self, overlay_geometry=None):
-        """Saves current state to persistence layer."""
+    def commit(self, overlay_geometry=None):
+        """Saves current state to persistence layer, syncing from the brain."""
+        if self.brain:
+            self._state["engine_name"] = self.brain.active_engine_name
+            # Skill name is managed by the brain's current_skill_data
+            if self.brain.current_skill_data:
+                self._state["skill_name"] = self.brain.current_skill_data.get("name", self._state["skill_name"])
+
         if overlay_geometry:
             self._state["overlay_geometry"] = overlay_geometry
+            
         SessionCache.save(self._state)

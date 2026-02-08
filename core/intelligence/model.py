@@ -1,6 +1,7 @@
 from core.config import settings
 from core.intelligence.engines.gemini import GeminiEngine
 from core.intelligence.engines.groq_engine import GroqEngine
+from core.intelligence.engines.fireworks import FireworksEngine
 from core.intelligence.events import SidecarEvent, SidecarEventType
 from typing import Generator, Optional
 
@@ -8,15 +9,17 @@ class SidecarBrain:
     def __init__(self, google_api_key, groq_api_key=None):
         self.google_api_key = google_api_key
         self.groq_api_key = groq_api_key
+        self.fireworks_api_key = settings.FIREWORKS_API_KEY
         
         # Initialize engines
         self.engines = {
             "gemini": GeminiEngine(google_api_key),
-            "groq": GroqEngine(groq_api_key) if groq_api_key else None
+            "groq": GroqEngine(groq_api_key) if groq_api_key else None,
+            "fireworks": FireworksEngine(self.fireworks_api_key) if self.fireworks_api_key else None
         }
         
-        pref = settings.SIDECAR_ENGINE
-        if pref == "groq" and not groq_api_key:
+        pref = settings.SIDECAR_ENGINE.lower()
+        if pref not in self.engines or not self.engines[pref]:
             pref = "gemini"
             
         self.active_engine_name = pref
@@ -34,11 +37,14 @@ class SidecarBrain:
             print(f"[!] Engine {name} not available. Staying on {self.active_engine_name}.")
 
     def switch_engine(self):
-        """Swaps the active engine at runtime."""
-        if not self.engines["groq"]:
-            return "GROQ key missing - cannot switch."
+        """Swaps the active engine at runtime (Rotation: Gemini -> Groq -> Fireworks)."""
+        available = [name for name, eng in self.engines.items() if eng]
+        if not available:
+            return "No available engines."
             
-        new_name = "groq" if self.active_engine_name == "gemini" else "gemini"
+        current_idx = available.index(self.active_engine_name)
+        new_name = available[(current_idx + 1) % len(available)]
+        
         self.active_engine_name = new_name
         self.active_engine = self.engines[new_name]
         

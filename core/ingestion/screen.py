@@ -1,7 +1,9 @@
 import os
+import io
 import mss
 import mss.tools
 from datetime import datetime
+from PIL import Image
 from core.config import settings
 from core.utils import monitor_utils
 
@@ -36,8 +38,27 @@ class ScreenCapture:
         # Grab the data
         sct_img = self.sct.grab(bbox)
         
-        # Convert to PNG bytes
-        png_bytes = mss.tools.to_png(sct_img.rgb, sct_img.size)
+        # Latency Optimization: Use Pillow to downsize captures for faster upload/processing
+        
+        # Convert mss object to PIL Image
+        img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+        
+        # Target dimension: 1280px (plenty for LLM vision to see code/UI)
+        MAX_DIM = 1280
+        w, h = img.size
+        if w > MAX_DIM or h > MAX_DIM:
+            if w > h:
+                new_h = int(h * (MAX_DIM / w))
+                new_w = MAX_DIM
+            else:
+                new_w = int(w * (MAX_DIM / h))
+                new_h = MAX_DIM
+            img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+        
+        # Fast PNG compression
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format="PNG", optimize=False, compress_level=1)
+        png_bytes = img_buffer.getvalue()
 
         # DEBUG: Save snapshot if enabled
         if settings.SAVE_DEBUG_SNAPSHOTS:

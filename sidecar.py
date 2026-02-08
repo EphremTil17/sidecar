@@ -42,6 +42,12 @@ class SidecarApp(QObject):
                 font_size=settings.GHOST_FONT_SIZE,
                 font_family=settings.GHOST_FONT_FAMILY
             )
+            
+            # Restore previous window geometry if cached
+            geom = self.session._state.get("overlay_geometry")
+            if geom:
+                self.terminal.setGeometry(geom[0], geom[1], geom[2], geom[3])
+            
             self.terminal.show()
             # Connect signal to UI slot only if active
             self.signal_append_text.connect(self.terminal.append_text)
@@ -96,7 +102,7 @@ class SidecarApp(QObject):
             self._response_active = False
             self._inline_active = False
             CLI.print_ready()
-        elif any(k in status for k in ["Capturing", "Analyzing", "RECORDING", "Intent"]):
+        elif any(k in status for k in ["Capturing", "Analyzing", "RECORDING", "Intent", "Latency"]):
             if self._inline_active:
                 print()
                 self._inline_active = False
@@ -111,6 +117,16 @@ class SidecarApp(QObject):
     def run(self):
         """Starts the main event loop."""
         exit_code = self.qt_app.exec()
+        
+        # Persistence Layer: Capture and save the final state of the session
+        logger.info("Syncing session state...")
+        geometry = None
+        if self.terminal:
+            geom = self.terminal.geometry()
+            geometry = [geom.x(), geom.y(), geom.width(), geom.height()]
+        
+        self.session.commit(overlay_geometry=geometry)
+        
         logger.info("Shutting down...")
         self.stdout_capture.stop()
         self.hk_thread.stop()

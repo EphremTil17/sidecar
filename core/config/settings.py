@@ -55,6 +55,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 SIDECAR_MONITOR_INDEX = int(os.getenv("SIDECAR_MONITOR_INDEX", 1))
 PROJECT_ROOT = os.getenv("PROJECT_ROOT", os.getcwd())
 TRANSCRIPTION_PATH = os.path.abspath(os.path.join(PROJECT_ROOT, os.getenv("TRANSCRIPTION_PATH", "transcription.txt")))
+FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
 
 # --- Capture Configuration ---
 CROP_MARGINS = {
@@ -88,6 +89,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MODEL_FLASH = os.getenv("MODEL_FLASH", "models/gemini-3-flash-preview")
 MODEL_PRO = os.getenv("MODEL_PRO", "models/gemini-3-pro-preview")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
+FIREWORKS_MODEL = os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/kimi-k2p5")
 GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 THINKING_LEVEL = os.getenv("THINKING_LEVEL", "high")
 AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 16000))
