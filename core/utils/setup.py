@@ -1,89 +1,66 @@
 import os
-from dotenv import load_dotenv
+import shutil
+import sys
+import importlib
+from dotenv import load_dotenv, set_key
 
 def ensure_config():
     """
-    Validates existence of the environment configuration and API keys.
-    If missing, initiates an interactive setup and generates a healthy .env file.
+    Ensures .env exists by deploying the template if missing.
+    Returns True if API keys are found, False otherwise.
     """
     env_path = ".env"
+    template_path = ".env.template"
     
-    # 1. Immediate validation of existing configuration
-    if os.path.exists(env_path):
-        load_dotenv(env_path, override=True)
-        # We allow either a Google or Groq key to proceed.
-        # Strict prefix checks (e.g., 'AIza') were removed to support varying key formats.
-        if os.getenv("GOOGLE_API_KEY") or os.getenv("GROQ_API_KEY"):
-            return True
+    if not os.path.exists(env_path):
+        if os.path.exists(template_path):
+            shutil.copy(template_path, env_path)
+            print(f"\n[i] Deployed {env_path} from template. (API Keys pending)")
+        else:
+            print(f"[!] Critical Error: {template_path} missing.")
+            sys.exit(1)
+
+    load_dotenv(env_path, override=True)
+    # Note: We don't reload settings here to avoid circular imports 
+    # if this is called during session bootstrap.
+    return bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GROQ_API_KEY"))
+
+def update_env_config(updates: dict):
+    """Writes specific key-value pairs to the .env file without destroying comments."""
+    env_path = ".env"
+    for key, value in updates.items():
+        set_key(env_path, key, str(value))
     
-    # 2. Interactive Setup Wizard
-    print("\n" + "="*50)
-    print("### SIDECAR AI: INITIAL SETUP ###")
-    print("="*50)
-    print("Configuration missing or invalid. Let's initialize your environment.")
-    print("Sidecar supports dual engines: Gemini (Google) and Maverick (Groq).")
+    # Reload environment to ensure settings will see the change on next reload
+    load_dotenv(env_path, override=True)
+
+def validate_api_keys():
+    """Final modular safety check. Ensures at least one thinking engine is available."""
+    from core.config import settings
     
-    print("\n[1] Enter Google API Key (Optional, for deep reasoning): ", end="")
-    google_key = input().strip()
+    # Define keys to check (Modular for future expansion)
+    keys = {
+        "GOOGLE_API_KEY": settings.GOOGLE_API_KEY,
+        "GROQ_API_KEY": settings.GROQ_API_KEY,
+        "FIREWORKS_API_KEY": settings.FIREWORKS_API_KEY
+    }
     
-    print("[2] Enter Groq API Key (Optional, for instant speed): ", end="")
-    groq_key = input().strip()
-    
-    if not google_key and not groq_key:
-        print("[!] Error: You must provide at least one API key.")
-        return False
-        
-    # 3. Derive Intelligent Defaults
-    default_engine = "gemini" if google_key else "groq"
-    
-    # 4. Environment Template Construction
-    # We use a clean, structured set of defaults to ensure the app boots successfully.
-    env_content = f"""# --- Application Identification ---
-SIDECAR_ENGINE={default_engine}
+    found_any = any(keys.values())
 
-# --- API Configuration ---
-GOOGLE_API_KEY={google_key}
-GROQ_API_KEY={groq_key}
-
-# --- Screen Capture Configuration ---
-# Standard 16:9 monitor safe-zones
-SIDECAR_MONITOR_INDEX=1
-SIDECAR_CROP_TOP=120
-SIDECAR_CROP_BOTTOM=40
-SIDECAR_CROP_LEFT=0
-SIDECAR_CROP_RIGHT=0
-
-# --- Hotkey Configuration (VK Codes) ---
-# Primary interface hotkeys
-HOTKEY_PROCESS=P
-HOTKEY_MODEL_TOGGLE=M
-HOTKEY_SKILL_SWAP=S
-
-# --- Intelligence Model Configuration ---
-MODEL_FLASH=models/gemini-3-flash-preview
-MODEL_PRO=models/gemini-3-pro-preview
-GROQ_MODEL=meta-llama/llama-4-maverick-17b-128e-instruct
-
-# --- Visual Preferences ---
-GHOST_OPACITY=0.78
-GHOST_FONT_SIZE=10
-GHOST_FONT_FAMILY=Consolas
-
-# --- Troubleshooting ---
-SIDECAR_DEBUG=False
-"""
-
-    try:
-        with open(env_path, "w", encoding="utf-8") as f:
-            f.write(env_content.strip() + "\n")
-        
-        print(f"\n[SUCCESS] Environment serialized to {env_path}")
-        print("[i] Rebooting with persistent session...")
-        print("="*50 + "\n")
-        
-        # Load the newly created environment for immediate use
-        load_dotenv(env_path, override=True)
-        return True
-    except Exception as e:
-        print(f"[!] File System Error: Unable to write .env: {e}")
-        return False
+    if not found_any:
+        print("\n" + "="*60)
+        print("### [ERROR] NO VALID AI ENGINES CONFIGURED ###")
+        print("="*60)
+        print("Hardware setup finished, but Sidecar found NO thinking models.")
+        print("\n[!] DETECTED MISSING KEYS:")
+        for name in keys.keys():
+            print(f" - {name}")
+            
+        print("\n[!] ACTION REQUIRED:")
+        print("Update your .env file with at least ONE valid API key to proceed.")
+        print("="*60 + "\n")
+        sys.exit(1)
+    else:
+        # Report status for found keys
+        active = [k for k, v in keys.items() if v]
+        print(f"\n[i] AI Infrastructure Validated. (Active: {', '.join(active)})")

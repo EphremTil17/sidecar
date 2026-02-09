@@ -19,10 +19,11 @@ class TerminalGhostWindow(QMainWindow):
     the window remains click-through 'Ghost' content.
     """
     
-    def __init__(self, opacity: float = 0.78, font_size: int = 10, font_family: str = "Consolas"):
+    def __init__(self, bg_opacity: float = 0.39, text_opacity: float = 0.78, font_size: int = 10, font_family: str = "Consolas"):
         super().__init__()
         
-        self.opacity = opacity
+        self.bg_opacity = bg_opacity
+        self.text_opacity = text_opacity
         self.max_lines = 1000
         self._is_currently_click_through = False
         
@@ -37,10 +38,10 @@ class TerminalGhostWindow(QMainWindow):
         
         # 2. Central Widget (The visual container)
         self.central_widget = QWidget()
-        alpha = int(opacity * 255)
+        bg_alpha = int(bg_opacity * 255)
         self.central_widget.setStyleSheet(f"""
             QWidget {{
-                background: rgba(0, 0, 0, {int(alpha * 0.5)});
+                background: rgba(0, 0, 0, {bg_alpha});
                 border: 1px solid rgba(200, 200, 200, 0.5);
                 border-radius: 6px;
             }}
@@ -65,10 +66,11 @@ class TerminalGhostWindow(QMainWindow):
         self.terminal.setFont(font)
         
         # 5. Global Terminal Styling
+        text_alpha = int(text_opacity * 255)
         self.terminal.setStyleSheet(f"""
             QPlainTextEdit {{
                 background: transparent;
-                color: rgba(255, 255, 255, {alpha});
+                color: rgba(255, 255, 255, {text_alpha});
                 border: none;
                 padding: 10px;
             }}
@@ -183,7 +185,14 @@ class TerminalGhostWindow(QMainWindow):
         cursor = self.terminal.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         
+        alpha_255 = int(self.text_opacity * 255)
+        
         for chunk_text, text_format in chunks:
+            # Shift the alpha of the foreground color to match our ghost settings
+            color = text_format.foreground().color()
+            color.setAlpha(alpha_255)
+            text_format.setForeground(color)
+            
             cursor.insertText(chunk_text, text_format)
         
         self.terminal.setTextCursor(cursor)
@@ -229,10 +238,10 @@ class TerminalGhostWindow(QMainWindow):
     def move_right(self, pixels: int = 50):
         self.move(self.x() + pixels, self.y())
         
-    def scroll_up(self, lines: int = 5):
+    def scroll_up(self, steps: int = 3):
         scrollbar = self.terminal.verticalScrollBar()
-        scrollbar.setValue(scrollbar.value() - (lines * 20)) 
+        scrollbar.setValue(scrollbar.value() - (scrollbar.singleStep() * steps)) 
         
-    def scroll_down(self, lines: int = 5):
+    def scroll_down(self, steps: int = 3):
         scrollbar = self.terminal.verticalScrollBar()
-        scrollbar.setValue(scrollbar.value() + (lines * 20))
+        scrollbar.setValue(scrollbar.value() + (scrollbar.singleStep() * steps))

@@ -1,13 +1,13 @@
 import sys
 import importlib
 from core.config import settings
-from core.ingestion.screen import ScreenCapture, get_available_monitors
+from core.ingestion.screen import ScreenCapture
 from core.ingestion.audio_sensor import AudioSensor
 from core.ingestion.orchestrator import RecordingOrchestrator
 from core.intelligence.model import SidecarBrain
 from core.intelligence.transcription_service import TranscriptionService
 from core.intelligence.skills import SkillManager
-from core.utils.setup import ensure_config
+from core.utils.setup import ensure_config, update_env_config, validate_api_keys
 from core.utils.session_cache import SessionCache
 from core.utils.hardware_director import HardwareDirector
 from core.utils.knowledge_director import KnowledgeDirector
@@ -43,9 +43,11 @@ class SessionManager:
         """Entry point for application lifecycle."""
         CLI.print_logo()
 
-        # 1. Try Fast Boot
+        # 1. Try Fast Boot (Only if we have valid API keys to avoid recovery crashes)
         cache = SessionCache.load()
-        if cache and self._attempt_fast_boot(cache):
+        has_keys = bool(settings.GOOGLE_API_KEY or settings.GROQ_API_KEY)
+
+        if has_keys and cache and self._attempt_fast_boot(cache):
             pass
         else:
             self._full_wizard()
@@ -102,22 +104,33 @@ class SessionManager:
 
     def _full_wizard(self):
         """Standard interactive setup."""
-        if not settings.GOOGLE_API_KEY and not settings.GROQ_API_KEY:
-            if not ensure_config(): sys.exit(1)
-            importlib.reload(settings)
-
-        # Hardware
+        # 1. Ensure file exists and load it
+        ensure_config()
+        importlib.reload(settings)
+        
+        # 2. Hardware Selection
         mon_idx, audio_id = self.hardware.select_hardware()
         self._state["monitor_index"] = mon_idx
         self._state["audio_device_id"] = audio_id
         
+        # Persistent storage for hardware choices
+        update_env_config({
+            "SIDECAR_MONITOR_INDEX": mon_idx,
+            "SIDECAR_AUDIO_DEVICE_ID": audio_id # Note: Optional but good for consistency
+        })
+        
+        # Reload settings again to pick up the hardware choices
+        importlib.reload(settings)
+        
+        # 3. Core Engine Initialization
         self._init_core_engines()
 
-        # Engine
+        # 4. Engine Selection
         self._state["engine_name"] = self._setup_engine_choice()
+        update_env_config({"SIDECAR_ENGINE": self._state["engine_name"]})
         self.brain.set_active_engine(self._state["engine_name"])
-
-        # Knowledge
+        
+        # 5. Skill Selection
         skill_res = self.knowledge.select_skill()
         self._state.update({
             "skill_name": skill_res["skill_name"],
@@ -125,6 +138,9 @@ class SessionManager:
             "session_context": skill_res["session_context"]
         })
         self.brain.set_skill(skill_res["data"], skill_res["prompt"])
+
+        # 6. Final Security Audit: Do we have keys to actually start?
+        validate_api_keys()
 
     def _init_core_engines(self):
         """Initializes hardware and brain components."""

@@ -96,7 +96,8 @@ AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 16000))
 
 # --- Ghost Configuration ---
 GHOST_MODE_AUTO = os.getenv("GHOST_MODE_AUTO", "False").lower() == "true"
-GHOST_OPACITY = float(os.getenv("GHOST_OPACITY", 0.78))
+GHOST_BG_OPACITY = float(os.getenv("GHOST_BG_OPACITY", 0.39))
+GHOST_TEXT_OPACITY = float(os.getenv("GHOST_TEXT_OPACITY", 0.78))
 GHOST_FONT_SIZE = int(os.getenv("GHOST_FONT_SIZE", 10))
 GHOST_FONT_FAMILY = os.getenv("GHOST_FONT_FAMILY", "Consolas")
 

@@ -38,7 +38,8 @@ class SidecarApp(QObject):
         self.terminal = None
         if self.ghost_enabled:
             self.terminal = TerminalGhostWindow(
-                opacity=settings.GHOST_OPACITY,
+                bg_opacity=settings.GHOST_BG_OPACITY,
+                text_opacity=settings.GHOST_TEXT_OPACITY,
                 font_size=settings.GHOST_FONT_SIZE,
                 font_family=settings.GHOST_FONT_FAMILY
             )

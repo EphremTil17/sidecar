@@ -11,16 +11,19 @@ class SidecarBrain:
         self.groq_api_key = groq_api_key
         self.fireworks_api_key = settings.FIREWORKS_API_KEY
         
-        # Initialize engines
+        # Initialize engines (Only if keys are truthy to prevent SDK initialization crashes)
         self.engines = {
-            "gemini": GeminiEngine(google_api_key),
+            "gemini": GeminiEngine(google_api_key) if google_api_key else None,
             "groq": GroqEngine(groq_api_key) if groq_api_key else None,
             "fireworks": FireworksEngine(self.fireworks_api_key) if self.fireworks_api_key else None
         }
         
+        # Determine the active engine based on preference and availability
         pref = settings.SIDECAR_ENGINE.lower()
         if pref not in self.engines or not self.engines[pref]:
-            pref = "gemini"
+            # Fallback to the first available engine
+            available = [name for name, eng in self.engines.items() if eng]
+            pref = available[0] if available else "gemini"
             
         self.active_engine_name = pref
         self.active_engine = self.engines[pref]
