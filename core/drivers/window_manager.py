@@ -29,11 +29,17 @@ SWP_NOOWNERZORDER = 0x0200
 def apply_ghost_mode(hwnd: int):
     """
     Sets display affinity to hide the window from capture APIs (Zoom, Teams, etc.)
+    And ensures layered flag for transparency support.
     """
     if not hwnd:
         return False
     
     result = user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+    
+    # Ensure WS_EX_LAYERED is set for transparency support
+    style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED)
+    
     return bool(result)
 
 def set_click_through(hwnd: int, enabled: bool):

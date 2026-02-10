@@ -15,6 +15,7 @@ HK_ID_MOVE_LEFT = 110
 HK_ID_MOVE_RIGHT = 111
 HK_ID_SCROLL_UP = 112
 HK_ID_SCROLL_DOWN = 113
+HK_ID_HIDE_TEXT = 114
 
 class HotkeyOrchestrator:
     """
@@ -52,6 +53,7 @@ class HotkeyOrchestrator:
             settings.HK_FONT_DOWN[0]: (HK_ID_FONT_DECREASE, "Font-", settings.HK_FONT_DOWN[1]),
             settings.HK_SCROLL_UP[0]: (HK_ID_SCROLL_UP, "Scroll Up", settings.HK_SCROLL_UP[1]),
             settings.HK_SCROLL_DOWN[0]: (HK_ID_SCROLL_DOWN, "Scroll Down", settings.HK_SCROLL_DOWN[1]),
+            settings.HK_HIDE_TEXT[0]: (HK_ID_HIDE_TEXT, "Focus Mode", settings.HK_HIDE_TEXT[1]),
         }
 
     def dispatch(self, hk_id: int):
@@ -77,10 +79,24 @@ class HotkeyOrchestrator:
             logger.debug(f"Hotkey event: Engine Switch ({hk_id})")
             msg = self.worker.brain.switch_engine()
             logger.info(msg)
+            if self.terminal:
+                self.terminal.show_hud_notification(msg)
+            return
+        elif hk_id == HK_ID_SKILL:
+            logger.debug(f"Hotkey event: Skill Switch ({hk_id})")
+            msg = self.worker.brain.switch_skill()
+            logger.info(msg)
+            if self.terminal:
+                self.terminal.show_hud_notification(msg)
             return
             
         # UI-dependent hotkeys (only dispatch if terminal exists)
         if not self.terminal:
+            return
+
+        # 2.5 Visibility Toggle
+        if hk_id == HK_ID_HIDE_TEXT:
+            self.terminal.toggle_focus_mode()
             return
 
         # 3. Dynamic UI Transformation

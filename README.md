@@ -125,8 +125,8 @@ If keys are missing, the system will interactively guide you through the setup.
 
 ## Technology Stack
 
-- **Reasoning Engine:** Google Gemini 1.5/2.0 (Deep Thinking)
-- **Extreme Speed Engine:** Groq Cloud (Llama 3/4 Maverick)
+- **Reasoning Engine:** Google Gemini 3.0 (Deep Thinking)
+- **Extreme Speed Engine:** Groq Cloud (Llama 3/4 Maverick) - Kimi K2.5 Thinking
 - **Capture:** `mss` (Multi-screen Ultra-fast Screenshot)
 - **Environment:** Python 3.12+ / Win32 API
 - **Testing:** pytest with comprehensive context injection tests

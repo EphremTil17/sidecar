@@ -71,6 +71,7 @@ HK_TALK = parse_hotkey("HOTKEY_TALK", "Ctrl+Alt+Shift+T")
 HK_MODEL = parse_hotkey("HOTKEY_MODEL", "Ctrl+Alt+Shift+M")
 HK_ENGINE = parse_hotkey("HOTKEY_ENGINE", "Ctrl+Alt+Shift+E")
 HK_SKILL = parse_hotkey("HOTKEY_SKILL", "Ctrl+Alt+Shift+S")
+HK_HIDE_TEXT = parse_hotkey("HOTKEY_HIDE_TEXT", "Ctrl+Alt+Shift+H")
 
 HK_MOVE_UP = parse_hotkey("HOTKEY_MOVE_UP", "Ctrl+Alt+Up")
 HK_MOVE_DOWN = parse_hotkey("HOTKEY_MOVE_DOWN", "Ctrl+Alt+Down")
@@ -96,10 +97,17 @@ AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 16000))
 
 # --- Ghost Configuration ---
 GHOST_MODE_AUTO = os.getenv("GHOST_MODE_AUTO", "False").lower() == "true"
-GHOST_BG_OPACITY = float(os.getenv("GHOST_BG_OPACITY", 0.39))
-GHOST_TEXT_OPACITY = float(os.getenv("GHOST_TEXT_OPACITY", 0.78))
+GHOST_BG_ALPHA_LOW = float(os.getenv("GHOST_BG_ALPHA_LOW", 0.39))
+GHOST_BG_ALPHA_HIGH = float(os.getenv("GHOST_BG_ALPHA_HIGH", 0.90))
+GHOST_TEXT_ALPHA_LOW = float(os.getenv("GHOST_TEXT_ALPHA_LOW", 0.78))
+GHOST_TEXT_ALPHA_HIGH = float(os.getenv("GHOST_TEXT_ALPHA_HIGH", 1.0))
 GHOST_FONT_SIZE = int(os.getenv("GHOST_FONT_SIZE", 10))
 GHOST_FONT_FAMILY = os.getenv("GHOST_FONT_FAMILY", "Consolas")
+GHOST_WIDTH = int(os.getenv("GHOST_WIDTH", 800))
+GHOST_HEIGHT = int(os.getenv("GHOST_HEIGHT", 600))
+
+# --- Modality Configuration ---
+VERBOSE_REASONING = os.getenv("SIDECAR_VERBOSE", "False").lower() == "true"
 
 # --- Debug Configuration ---
 SAVE_DEBUG_SNAPSHOTS = os.getenv("SIDECAR_DEBUG", "False").lower() == "true"

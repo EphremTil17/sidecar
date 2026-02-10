@@ -38,16 +38,21 @@ class SidecarApp(QObject):
         self.terminal = None
         if self.ghost_enabled:
             self.terminal = TerminalGhostWindow(
-                bg_opacity=settings.GHOST_BG_OPACITY,
-                text_opacity=settings.GHOST_TEXT_OPACITY,
+                bg_low=settings.GHOST_BG_ALPHA_LOW,
+                bg_high=settings.GHOST_BG_ALPHA_HIGH,
+                text_low=settings.GHOST_TEXT_ALPHA_LOW,
+                text_high=settings.GHOST_TEXT_ALPHA_HIGH,
                 font_size=settings.GHOST_FONT_SIZE,
-                font_family=settings.GHOST_FONT_FAMILY
+                font_family=settings.GHOST_FONT_FAMILY,
+                width=settings.GHOST_WIDTH,
+                height=settings.GHOST_HEIGHT
             )
             
             # Restore previous window geometry if cached
             geom = self.session._state.get("overlay_geometry")
             if geom:
-                self.terminal.setGeometry(geom[0], geom[1], geom[2], geom[3])
+                # Use cached position (x, y) but prioritize .env for dimensions (w, h)
+                self.terminal.setGeometry(geom[0], geom[1], settings.GHOST_WIDTH, settings.GHOST_HEIGHT)
             
             self.terminal.show()
             # Connect signal to UI slot only if active
@@ -94,6 +99,8 @@ class SidecarApp(QObject):
             print()
             self._inline_active = False
             self._response_active = True
+            if self.terminal:
+                self.terminal.add_turn_divider()
         color = CLI.Fore.CYAN if vector == "a" else CLI.Fore.GREEN
         print(f"{color}{chunk}{CLI.Style.RESET_ALL}", end="", flush=True)
 
@@ -139,6 +146,10 @@ if __name__ == "__main__":
         import os
         os.environ["SIDECAR_DEBUG"] = "true"
         logger.update_level()
+        
+    if "--verbose" in sys.argv:
+        settings.VERBOSE_REASONING = True
+        logger.info("Verbose Reasoning ENABLED.")
         
     try:
         SidecarApp().run()
