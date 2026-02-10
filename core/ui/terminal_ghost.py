@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QMainWindow, QPlainTextEdit, QVBoxLayout, QWidget
-from PyQt6.QtCore import Qt, QTimer, QRect
-from PyQt6.QtGui import QFont, QTextCursor, QCursor
+from PyQt6.QtCore import Qt, QTimer, QRect, QPoint
+from PyQt6.QtGui import QFont, QTextCursor, QCursor, QTextCharFormat
 from core.ui.ansi_parser import ANSIParser
 from core.drivers.window_manager import apply_ghost_mode, set_always_on_top, set_click_through
 from core.utils.logger import logger
@@ -19,13 +19,19 @@ class TerminalGhostWindow(QMainWindow):
     the window remains click-through 'Ghost' content.
     """
     
-    def __init__(self, bg_opacity: float = 0.39, text_opacity: float = 0.78, font_size: int = 10, font_family: str = "Consolas"):
+    def __init__(self, bg_low: float, bg_high: float, text_low: float, text_high: float, 
+                 font_size: int = 10, font_family: str = "Consolas",
+                 width: int = 800, height: int = 600):
         super().__init__()
         
-        self.bg_opacity = bg_opacity
-        self.text_opacity = text_opacity
+        self.bg_low = bg_low
+        self.bg_high = bg_high
+        self.text_low = text_low
+        self.text_high = text_high
         self.max_lines = 1000
         self._is_currently_click_through = False
+        self._focus_mode = False # Toggle state for Clarity/Blur mode
+        self._history_cache = [] # Cache of (text, format) chunks
         
         # 1. Window Configuration
         # Frameless, Always-on-Top, and hidden from Taskbar (Tool window)
@@ -38,7 +44,7 @@ class TerminalGhostWindow(QMainWindow):
         
         # 2. Central Widget (The visual container)
         self.central_widget = QWidget()
-        bg_alpha = int(bg_opacity * 255)
+        bg_alpha = int(self.bg_low * 255)
         self.central_widget.setStyleSheet(f"""
             QWidget {{
                 background: rgba(0, 0, 0, {bg_alpha});
@@ -66,13 +72,13 @@ class TerminalGhostWindow(QMainWindow):
         self.terminal.setFont(font)
         
         # 5. Global Terminal Styling
-        text_alpha = int(text_opacity * 255)
+        text_alpha = int(self.text_low * 255)
         self.terminal.setStyleSheet(f"""
             QPlainTextEdit {{
                 background: transparent;
                 color: rgba(255, 255, 255, {text_alpha});
                 border: none;
-                padding: 10px;
+                padding: 10px 0px 10px 10px;
             }}
         """)
         self.layout.addWidget(self.terminal)
@@ -80,6 +86,12 @@ class TerminalGhostWindow(QMainWindow):
         # 6. Minimalist Ghost Scrollbar
         self.terminal.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.terminal.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        # 6.5 Status Dot (Indicator for hidden text)
+        self.status_dot = QWidget(self.central_widget)
+        self.status_dot.setFixedSize(5, 5)
+        self.status_dot.setStyleSheet("background-color: rgba(0, 255, 255, 0.5); border-radius: 2px;")
+        self.status_dot.hide() # Hidden by default
         
         scrollbar_width = 7 # Sleek 7px visual width
         self.terminal.verticalScrollBar().setStyleSheet(f"""
@@ -107,7 +119,8 @@ class TerminalGhostWindow(QMainWindow):
         """)
         
         # 7. Default Window Geometry
-        self.resize(800, 600)
+        self.resize(width, height)
+        self._reposition_status_dot()
         
         # 8. Mouse Polling for Interactivity
         # This timer drives the hybrid hit-testing logic safely.
@@ -178,37 +191,148 @@ class TerminalGhostWindow(QMainWindow):
             # Silent fail for hit-testing to prevent UI stutters
             pass
 
-    def append_text(self, text: str):
-        """Append text to the terminal with full ANSI color support."""
-        chunks = ANSIParser.parse(text)
+    def _reposition_status_dot(self):
+        """Keep the status dot in the top-right corner."""
+        self.status_dot.move(self.central_widget.width() - 10, 5)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_status_dot()
+
+    def toggle_focus_mode(self):
+        """
+        Premium Clarity Toggle: 
+        Switches between minimalist 'Ghost' and high-contrast 'Focus' (Solid) mode.
+        """
+        self._focus_mode = not self._focus_mode
+        
+        if self._focus_mode:
+            # FOCUS MODE: High contrast, solid background for readability
+            bg_alpha = int(self.bg_high * 255)
+            text_alpha_val = self.text_high
+            self.status_dot.show()
+            logger.debug("Ghost Mode: FOCUS / HIGH-CONTRAST Active")
+        else:
+            # NORMAL MODE: Minimalist Ghost
+            bg_alpha = int(self.bg_low * 255)
+            text_alpha_val = self.text_low
+            self.status_dot.hide()
+            logger.debug("Ghost Mode: GHOST / TRANSPARENT Active")
+
+        # 1. Update Container Style (Background Opacity)
+        self.central_widget.setStyleSheet(f"""
+            QWidget {{
+                background: rgba(0, 0, 0, {bg_alpha});
+                border: 1px solid rgba(200, 200, 200, 0.3);
+                border-radius: 6px;
+            }}
+        """)
+
+        # 2. Update Terminal Style (Base Text Opacity / Padding)
+        text_alpha_255 = int(text_alpha_val * 255)
+        self.terminal.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background: transparent;
+                color: rgba(255, 255, 255, {text_alpha_255});
+                border: none;
+                padding: 10px 0px 10px 10px;
+            }}
+        """)
+        
+        # 3. Force re-render from cache with new alpha
+        self._refresh_text_stream()
+
+    def _refresh_text_stream(self):
+        """Force re-rendering from cache without resetting scroll position."""
+        v_scroll = self.terminal.verticalScrollBar()
+        scroll_pos = v_scroll.value()
+        
+        self.terminal.clear()
         
         cursor = self.terminal.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         
-        alpha_255 = int(self.text_opacity * 255)
+        # Calculate current alpha based on visibility
+        current_text_opacity = self.text_high if self._focus_mode else self.text_low
+        alpha_255 = int(current_text_opacity * 255)
+        
+        # Batch insert from parsed cache (Zero Regex Overhead)
+        for chunk_text, text_format in self._history_cache:
+            # IMPORTANT: Clone the format to avoid mutating the master cache
+            fmt = QTextCharFormat(text_format)
+            color = fmt.foreground().color()
+            color.setAlpha(alpha_255)
+            fmt.setForeground(color)
+            cursor.insertText(chunk_text, fmt)
+            
+        self.terminal.setTextCursor(cursor)
+        
+        # Restore scroll position to prevent reset during toggle
+        v_scroll.setValue(scroll_pos)
+
+    def show_hud_notification(self, message: str):
+        """Displays a concise HUD message in the terminal."""
+        # Simplified single-line format for space efficiency
+        self.append_text(f"\n[INFO] {message}\n")
+
+    def add_turn_divider(self):
+        """Adds a subtle visual divider between AI turns."""
+        divider_width = 40
+        # Using Gray color (90m) for the divider
+        divider_msg = f"\x1b[90m{'-' * divider_width}\x1b[0m\n"
+        self.append_text(divider_msg)
+
+    def append_text(self, text: str):
+        """Parse once, cache, and render."""
+        chunks = ANSIParser.parse(text)
+        
+        # 1. Update Persistent Cache
+        for chunk_text, text_format in chunks:
+            self._history_cache.append((chunk_text, text_format))
+            
+        # 2. Render specifically these new chunks
+        self._render_chunks(chunks)
+        self._trim_history()
+
+    def _render_chunks(self, chunks):
+        """Appends pre-parsed chunks to the document."""
+        cursor = self.terminal.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        
+        # Calculate current alpha based on Focus Mode
+        current_text_opacity = self.text_high if self._focus_mode else self.text_low
+        alpha_255 = int(current_text_opacity * 255)
         
         for chunk_text, text_format in chunks:
-            # Shift the alpha of the foreground color to match our ghost settings
-            color = text_format.foreground().color()
+            # IMPORTANT: Clone the format to avoid mutating the master cache
+            fmt = QTextCharFormat(text_format)
+            color = fmt.foreground().color()
             color.setAlpha(alpha_255)
-            text_format.setForeground(color)
-            
-            cursor.insertText(chunk_text, text_format)
+            fmt.setForeground(color)
+            cursor.insertText(chunk_text, fmt)
         
         self.terminal.setTextCursor(cursor)
         self.terminal.ensureCursorVisible()
-        self._trim_history()
-        
+
+        self.terminal.ensureCursorVisible()
+
     def _trim_history(self):
         """Maintain performance by limiting the terminal buffer length."""
+        # 1. Trim the visual widget
         doc = self.terminal.document()
-        if doc.blockCount() > self.max_lines:
+        blocks_to_remove = doc.blockCount() - self.max_lines
+        
+        if blocks_to_remove > 0:
             cursor = QTextCursor(doc)
             cursor.movePosition(QTextCursor.MoveOperation.Start)
-            for _ in range(doc.blockCount() - self.max_lines):
+            for _ in range(blocks_to_remove):
                 cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
                 cursor.removeSelectedText()
-                cursor.deleteChar() # Remove trailing block separator
+                cursor.deleteChar()
+            
+            # Trim the pre-parsed cache (2x multiplier to account for chunking)
+            if len(self._history_cache) > self.max_lines * 2:
+                self._history_cache = self._history_cache[-(self.max_lines * 2):]
                 
     def increase_font_size(self):
         """Dynamic font scaling via hotkeys."""

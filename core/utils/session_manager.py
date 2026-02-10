@@ -144,7 +144,7 @@ class SessionManager:
 
     def _init_core_engines(self):
         """Initializes hardware and brain components."""
-        self.brain = SidecarBrain(settings.GOOGLE_API_KEY, settings.GROQ_API_KEY)
+        self.brain = SidecarBrain(settings.GOOGLE_API_KEY, settings.GROQ_API_KEY, self.skill_manager)
         self.transcription_service = TranscriptionService(settings.GROQ_API_KEY)
         self.capture_tool = ScreenCapture(self._state["monitor_index"])
         self.sensor = AudioSensor()

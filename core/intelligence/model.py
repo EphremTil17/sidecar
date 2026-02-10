@@ -6,9 +6,10 @@ from core.intelligence.events import SidecarEvent, SidecarEventType
 from typing import Generator, Optional
 
 class SidecarBrain:
-    def __init__(self, google_api_key, groq_api_key=None):
+    def __init__(self, google_api_key, groq_api_key=None, skill_manager=None):
         self.google_api_key = google_api_key
         self.groq_api_key = groq_api_key
+        self.skill_manager = skill_manager
         self.fireworks_api_key = settings.FIREWORKS_API_KEY
         
         # Initialize engines (Only if keys are truthy to prevent SDK initialization crashes)
@@ -62,6 +63,31 @@ class SidecarBrain:
         for name, engine in self.engines.items():
             if engine:
                 engine.init_session(assembled_prompt)
+
+    def switch_skill(self):
+        """Rotates to the next available skill."""
+        if not self.skill_manager:
+            return "Skill Manager not initialized."
+            
+        available = self.skill_manager.list_skills()
+        if not available:
+            return "No skills found."
+            
+        current_name = self.current_skill_data.get("name", "default") if self.current_skill_data else "default"
+        try:
+            current_idx = available.index(current_name)
+        except ValueError:
+            current_idx = -1
+            
+        new_skill_name = available[(current_idx + 1) % len(available)]
+        
+        # Load and pivot
+        new_data, placeholders = self.skill_manager.load_skill(new_skill_name)
+        new_data["name"] = new_skill_name
+        assembled = self.skill_manager.assemble_prompt(new_data)
+        
+        self.set_skill(new_data, assembled)
+        return f"Pivoted to Skill: {new_skill_name.upper()}"
 
     def init_chat(self):
         """Initializes the active engine's session."""

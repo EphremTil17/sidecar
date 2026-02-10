@@ -49,7 +49,8 @@ class GeminiEngine(BaseEngine):
                 if chunk.candidates[0].content and chunk.candidates[0].content.parts:
                     for part in chunk.candidates[0].content.parts:
                         if part.thought:
-                            yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=part.text, metadata={"is_thought": True})
+                            if settings.VERBOSE_REASONING:
+                                yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=part.text, metadata={"is_thought": True})
                         elif part.text:
                             yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=part.text)
                     
