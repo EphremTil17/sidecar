@@ -55,7 +55,7 @@ class SidecarApp(QObject):
                 self.terminal.setGeometry(geom[0], geom[1], settings.GHOST_WIDTH, settings.GHOST_HEIGHT)
             
             self.terminal.show()
-            # Connect signal to UI slot only if active
+            # Connect signals for terminal interactivity
             self.signal_append_text.connect(self.terminal.append_text)
             logger.success("Terminal Ghost Mode ACTIVATED.")
         else:
@@ -83,6 +83,8 @@ class SidecarApp(QObject):
         # 6. Lifecycle Monitoring
         self.worker.signal_chunk_update.connect(self._on_terminal_chunk)
         self.worker.signal_status_update.connect(self._on_status_update)
+        if self.terminal:
+            self.worker.signal_hud_notification.connect(self.terminal.show_hud_notification)
         
         self._response_active = False
         self._inline_active = False
