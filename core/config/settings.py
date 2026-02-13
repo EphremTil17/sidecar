@@ -72,6 +72,7 @@ HK_MODEL = parse_hotkey("HOTKEY_MODEL", "Ctrl+Alt+Shift+M")
 HK_ENGINE = parse_hotkey("HOTKEY_ENGINE", "Ctrl+Alt+Shift+E")
 HK_SKILL = parse_hotkey("HOTKEY_SKILL", "Ctrl+Alt+Shift+S")
 HK_HIDE_TEXT = parse_hotkey("HOTKEY_HIDE_TEXT", "Ctrl+Alt+Shift+H")
+HK_INGEST = parse_hotkey("HOTKEY_INGEST", "Ctrl+Alt+Shift+I")
 
 HK_MOVE_UP = parse_hotkey("HOTKEY_MOVE_UP", "Ctrl+Alt+Up")
 HK_MOVE_DOWN = parse_hotkey("HOTKEY_MOVE_DOWN", "Ctrl+Alt+Down")

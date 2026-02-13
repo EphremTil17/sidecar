@@ -16,6 +16,7 @@ HK_ID_MOVE_RIGHT = 111
 HK_ID_SCROLL_UP = 112
 HK_ID_SCROLL_DOWN = 113
 HK_ID_HIDE_TEXT = 114
+HK_ID_INGEST = 115
 
 class HotkeyOrchestrator:
     """
@@ -54,6 +55,7 @@ class HotkeyOrchestrator:
             settings.HK_SCROLL_UP[0]: (HK_ID_SCROLL_UP, "Scroll Up", settings.HK_SCROLL_UP[1]),
             settings.HK_SCROLL_DOWN[0]: (HK_ID_SCROLL_DOWN, "Scroll Down", settings.HK_SCROLL_DOWN[1]),
             settings.HK_HIDE_TEXT[0]: (HK_ID_HIDE_TEXT, "Focus Mode", settings.HK_HIDE_TEXT[1]),
+            settings.HK_INGEST[0]: (HK_ID_INGEST, "Ingest [I]", settings.HK_INGEST[1]),
         }
 
     def dispatch(self, hk_id: int):
@@ -67,6 +69,12 @@ class HotkeyOrchestrator:
         elif hk_id == HK_ID_TALK:
             logger.debug(f"Hotkey event: Talk ({hk_id})")
             self.worker.handle_verbal_request()
+            return
+        elif hk_id == HK_ID_INGEST:
+            logger.debug(f"Hotkey event: Ingest ({hk_id})")
+            msg = self.worker.handle_ingest_request()
+            if self.terminal and msg:
+                self.terminal.show_hud_notification(msg)
             return
             
         # 2. Intelligence State Management

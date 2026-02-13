@@ -20,21 +20,34 @@ class GroqEngine(BaseEngine):
     def add_user_message(self, content: str):
         self.messages.append({"role": "user", "content": content})
 
-    def stream_analysis(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
+    def stream_analysis(self, png_bytes: bytes, additional_text: str = "", context_images: list = None) -> Generator[SidecarEvent, None, None]:
         user_content = []
         
+        # 1. Prepend supporting context from the vault
+        if context_images:
+            user_content.append({"type": "text", "text": "### SUPPORTING VISUAL CONTEXT ###\n(The following images provide background context for my request below)"})
+            for item in context_images:
+                b64_img = base64.b64encode(item.image_bytes).decode('utf-8')
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64_img}"}
+                })
+            user_content.append({"type": "text", "text": "\n### END OF CONTEXT ###\n"})
+
+        # 2. Add primary task content
         if png_bytes:
             # Convert bytes to base64
             base64_image = base64.b64encode(png_bytes).decode('utf-8')
+            user_content.append({"type": "text", "text": "### PRIMARY TASK VIEW ###"})
             user_content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/png;base64,{base64_image}"}
             })
             
-        # Combine text prompts into one to avoid "Multiple text parts not supported" errors
-        text_prompt = "Analyze this view."
+        # 3. Final request text
+        text_prompt = "[USER REQUEST]: " if additional_text else "Analyze the Primary Task View using the provided context."
         if additional_text:
-            text_prompt += f"\n\n[CONVERSATION TURN]: {additional_text}"
+            text_prompt += additional_text
         
         user_content.append({"type": "text", "text": text_prompt})
 

@@ -9,7 +9,7 @@ class BaseEngine(ABC):
         pass
 
     @abstractmethod
-    def stream_analysis(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
+    def stream_analysis(self, png_bytes: bytes, additional_text: str = "", context_images: list = None) -> Generator[SidecarEvent, None, None]:
         """Streams analysis events (text, status, etc.)"""
         pass
 

@@ -11,6 +11,7 @@ class SidecarWorker(QThread):
     signal_chunk_update = pyqtSignal(str, str)  # Stream text chunks to UI
     signal_status_update = pyqtSignal(str)      # Update UI status text
     signal_recording_toggle = pyqtSignal(bool)  # Sync recording UI state
+    signal_hud_notification = pyqtSignal(str)   # Logic-to-UI HUD trigger
 
     def __init__(self, components: dict):
         super().__init__()
@@ -68,6 +69,23 @@ class SidecarWorker(QThread):
             with QMutexLocker(self._lock):
                 self.processing_turn = False
             self.signal_status_update.emit("READY")
+
+    def handle_ingest_request(self):
+        """Silent Ingestion: Adds context to the brain vault without triggering AI analysis."""
+        with QMutexLocker(self._lock):
+            if self.processing_turn:
+                return None
+            
+        try:
+            png_bytes = self.capture_tool.capture()
+            if png_bytes:
+                self.brain.add_to_vault(png_bytes)
+                logger.info("Visual context successfully added to Vault.")
+                return "Information Ingested"
+            return "Capture Failed"
+        except Exception as e:
+            logger.error(f"Ingest Error: {e}")
+            return f"Ingest Error: {e}"
 
     def handle_verbal_request(self):
         """Vector T: Manages audio state (Start/Stop) and triggers transcription analysis."""

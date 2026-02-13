@@ -26,19 +26,29 @@ class GeminiEngine(BaseEngine):
         )
         self.chat_session = self.client.chats.create(model=model_id, config=config)
 
-    def stream_analysis(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
+    def stream_analysis(self, png_bytes: bytes, additional_text: str = "", context_images: list = None) -> Generator[SidecarEvent, None, None]:
         if not self.chat_session:
             self.init_session(self.current_system_prompt)
 
         try:
             content_parts = []
+            
+            # 1. Prepend supporting context from the vault
+            if context_images:
+                content_parts.append("### SUPPORTING VISUAL CONTEXT ###\n(The following images provide background context for my request below)")
+                for item in context_images:
+                    img_part = types.Part.from_bytes(data=item.image_bytes, mime_type="image/png")
+                    content_parts.append(img_part)
+                content_parts.append("\n### END OF CONTEXT ###\n")
+
+            # 2. Add current task content
             if png_bytes:
-                content_parts.append("Analyze this view.")
+                content_parts.append("### PRIMARY TASK VIEW ###")
                 image_part = types.Part.from_bytes(data=png_bytes, mime_type="image/png")
                 content_parts.append(image_part)
             
             if additional_text:
-                content_parts.append(f"\n[CONVERSATION TURN]: {additional_text}")
+                content_parts.append(f"\n[USER REQUEST]: {additional_text}")
             
             if not content_parts:
                  yield SidecarEvent(SidecarEventType.ERROR, content="No visual or verbal context provided.")

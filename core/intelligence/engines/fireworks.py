@@ -40,10 +40,10 @@ class FireworksEngine(BaseEngine):
         """Adds a pure text user message (e.g. from Vector T)."""
         self.messages.append({"role": "user", "content": content})
 
-    def stream_analysis(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
+    def stream_analysis(self, png_bytes: bytes, additional_text: str = "", context_images: list = None) -> Generator[SidecarEvent, None, None]:
         """
         Multimodal analysis stream (Vector P).
-        Optimized order: [image_url, text] as per VLM ingestion best practices.
+        Prepend context vault images as supporting material.
         """
         if not self.api_key:
             yield SidecarEvent(SidecarEventType.ERROR, content="Fireworks API Key is missing.")
@@ -51,18 +51,30 @@ class FireworksEngine(BaseEngine):
 
         user_content = []
         
-        # 1. Vision Part (Encoded as Base64)
+        # 1. Prepend supporting context from the vault
+        if context_images:
+            user_content.append({"type": "text", "text": "### SUPPORTING VISUAL CONTEXT ###\n(Background info for the primary task below)"})
+            for item in context_images:
+                b64_img = base64.b64encode(item.image_bytes).decode('utf-8')
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64_img}"}
+                })
+            user_content.append({"type": "text", "text": "\n### END OF CONTEXT ###\n"})
+
+        # 2. Vision Part (Primary Task)
         if png_bytes:
             base64_image = base64.b64encode(png_bytes).decode('utf-8')
+            user_content.append({"type": "text", "text": "### PRIMARY TASK VIEW ###"})
             user_content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/png;base64,{base64_image}"}
             })
 
-        # 2. Text Part
-        text_prompt = "Analyze this view."
+        # 3. Text Part
+        text_prompt = "[USER REQUEST]: " if additional_text else "Analyze the Primary Task View using the provided context."
         if additional_text:
-            text_prompt += f"\n\n[CONVERSATION TURN]: {additional_text}"
+            text_prompt += additional_text
         user_content.append({"type": "text", "text": text_prompt})
 
         self.messages.append({"role": "user", "content": user_content})

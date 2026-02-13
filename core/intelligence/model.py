@@ -2,8 +2,9 @@ from core.config import settings
 from core.intelligence.engines.gemini import GeminiEngine
 from core.intelligence.engines.groq_engine import GroqEngine
 from core.intelligence.engines.fireworks import FireworksEngine
+from core.intelligence.vision_vault import VisionVault
 from core.intelligence.events import SidecarEvent, SidecarEventType
-from typing import Generator, Optional
+from typing import Generator, Optional, List
 
 class SidecarBrain:
     def __init__(self, google_api_key, groq_api_key=None, skill_manager=None):
@@ -31,6 +32,7 @@ class SidecarBrain:
         
         self.current_skill_data = None
         self.current_system_prompt = ""
+        self.vision_vault = VisionVault()
 
     def set_active_engine(self, name):
         """Sets the active engine by name."""
@@ -87,6 +89,7 @@ class SidecarBrain:
         assembled = self.skill_manager.assemble_prompt(new_data)
         
         self.set_skill(new_data, assembled)
+        self.vision_vault.clear() # Clear context when switching task personas
         return f"Pivoted to Skill: {new_skill_name.upper()}"
 
     def init_chat(self):
@@ -94,9 +97,13 @@ class SidecarBrain:
         self.active_engine.init_session(self.current_system_prompt)
 
     def analyze_image_stream(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
-        """Streams analysis with injected visual and verbal context."""
-        # Note: Recency bias optimization—additional_text (transcription) is appended last in the engine's prompt assembly
-        return self.active_engine.stream_analysis(png_bytes, additional_text)
+        """Streams analysis with injected visual (current + vaulted) and verbal context."""
+        context = self.vision_vault.get_context()
+        return self.active_engine.stream_analysis(png_bytes, additional_text, context_images=context)
+
+    def add_to_vault(self, image_bytes: bytes):
+        """Adds a screenshot to the persistent context vault."""
+        self.vision_vault.add(image_bytes)
 
     def analyze_verbal_stream(self, transcription: str) -> Generator[SidecarEvent, None, None]:
         """Streams a follow-up response based strictly on verbal context (T vector)."""
@@ -113,9 +120,8 @@ class SidecarBrain:
              yield from self.active_engine._execute_chat_completion()
         else:
             # Fallback for Gemini: stream_analysis(None, transcription) already appends context
-            # We don't want to double-append, but add_user_message for Gemini is currently a no-op
-            # so this is safe.
-            yield from self.active_engine.stream_analysis(None, transcription)
+            context = self.vision_vault.get_context()
+            yield from self.active_engine.stream_analysis(None, transcription, context_images=context)
 
     def pivot_skill(self, skill_data: dict, assembled_prompt: str):
         """Pivots the skill for the active engine."""
