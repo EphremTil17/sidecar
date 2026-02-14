@@ -36,6 +36,12 @@ class RecordingOrchestrator:
         
         return self.state, None
 
+    def stop(self):
+        """Graceful stop for cleanup registration."""
+        if self.state == RecordingState.RECORDING:
+            self.sensor.stop()
+            self.state = RecordingState.IDLE
+
     @property
     def is_idle(self):
         return self.state == RecordingState.IDLE

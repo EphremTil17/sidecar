@@ -1,5 +1,7 @@
 import ctypes
+import sys
 from ctypes import wintypes
+from core.utils.logger import logger
 
 # Win32 Constants
 WDA_NONE = 0x00000000
@@ -26,6 +28,13 @@ SWP_SHOWWINDOW = 0x0040
 SWP_HIDEWINDOW = 0x0080
 SWP_NOOWNERZORDER = 0x0200
 
+def is_ghost_mode_supported() -> bool:
+    """Ghost Mode (WDA_EXCLUDEFROMCAPTURE) requires Windows 10 1803+ (Build 17134)."""
+    try:
+        return sys.platform == "win32" and sys.getwindowsversion().build >= 17134
+    except:
+        return False
+
 def apply_ghost_mode(hwnd: int):
     """
     Sets display affinity to hide the window from capture APIs (Zoom, Teams, etc.)
@@ -34,13 +43,19 @@ def apply_ghost_mode(hwnd: int):
     if not hwnd:
         return False
     
-    result = user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+    # Feature Detection: Ensure OS supports Capture Exclusion
+    if is_ghost_mode_supported():
+        user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+        logger.debug("Win32: Capture Exclusion applied.")
+    else:
+        logger.warning("Win32: Capture Exclusion NOT supported on this Windows version.")
     
     # Ensure WS_EX_LAYERED is set for transparency support
     style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED)
+    if not (style & WS_EX_LAYERED):
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED)
     
-    return bool(result)
+    return True
 
 def set_click_through(hwnd: int, enabled: bool):
     """

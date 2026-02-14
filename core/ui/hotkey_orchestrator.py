@@ -1,5 +1,6 @@
 from core.config import settings
 from core.utils.logger import logger
+from core.utils.events import bus, AppEvent
 
 # Hotkey Unique Identifiers
 HK_ID_PIXEL = 101
@@ -27,8 +28,7 @@ class HotkeyOrchestrator:
     It ensures that hotkey registration and execution are decoupled 
     from the main application logic.
     """
-    def __init__(self, worker, terminal=None):
-        self.worker = worker
+    def __init__(self, terminal=None):
         self.terminal = terminal
         
     def get_mappings(self) -> dict:
@@ -64,36 +64,29 @@ class HotkeyOrchestrator:
         # 1. Primary AI Analysis Vectors
         if hk_id == HK_ID_PIXEL:
             logger.debug(f"Hotkey event: Pixel ({hk_id})")
-            self.worker.trigger_pixel_request.emit()
+            bus.publish(AppEvent.TRIGGER_PIXEL)
             return
         elif hk_id == HK_ID_TALK:
             logger.debug(f"Hotkey event: Talk ({hk_id})")
-            self.worker.trigger_verbal_request.emit()
+            bus.publish(AppEvent.TRIGGER_TALK)
             return
         elif hk_id == HK_ID_INGEST:
             logger.debug(f"Hotkey event: Ingest ({hk_id})")
-            self.worker.trigger_ingest_request.emit()
+            bus.publish(AppEvent.TRIGGER_INGEST)
             return
             
         # 2. Intelligence State Management
         elif hk_id == HK_ID_MODEL:
             logger.debug(f"Hotkey event: Model Toggle ({hk_id})")
-            self.worker.brain.toggle_model()
-            logger.info(f"Active model: {self.worker.brain.get_model_name()}")
+            bus.publish(AppEvent.INTELLIGENCE_TOGGLE_MODEL)
             return
         elif hk_id == HK_ID_ENGINE:
             logger.debug(f"Hotkey event: Engine Switch ({hk_id})")
-            msg = self.worker.brain.switch_engine()
-            logger.info(msg)
-            if self.terminal:
-                self.terminal.show_hud_notification(msg)
+            bus.publish(AppEvent.INTELLIGENCE_SWITCH_ENGINE)
             return
         elif hk_id == HK_ID_SKILL:
             logger.debug(f"Hotkey event: Skill Switch ({hk_id})")
-            msg = self.worker.brain.switch_skill()
-            logger.info(msg)
-            if self.terminal:
-                self.terminal.show_hud_notification(msg)
+            bus.publish(AppEvent.INTELLIGENCE_SWITCH_SKILL)
             return
             
         # UI-dependent hotkeys (only dispatch if terminal exists)
@@ -102,27 +95,27 @@ class HotkeyOrchestrator:
 
         # 2.5 Visibility Toggle
         if hk_id == HK_ID_HIDE_TEXT:
-            self.terminal.toggle_focus_mode()
+            bus.publish(AppEvent.UI_FOCUS_TOGGLE)
             return
 
         # 3. Dynamic UI Transformation
         if hk_id == HK_ID_FONT_INCREASE:
-            self.terminal.increase_font_size()
+            bus.publish(AppEvent.UI_FONT_SCALE, 1)
         elif hk_id == HK_ID_FONT_DECREASE:
-            self.terminal.decrease_font_size()
+            bus.publish(AppEvent.UI_FONT_SCALE, -1)
             
         # 4. Terminal Placement
         elif hk_id == HK_ID_MOVE_UP:
-            self.terminal.move_up(50)
+            bus.publish(AppEvent.UI_MOVE, (0, -50))
         elif hk_id == HK_ID_MOVE_DOWN:
-            self.terminal.move_down(50)
+            bus.publish(AppEvent.UI_MOVE, (0, 50))
         elif hk_id == HK_ID_MOVE_LEFT:
-            self.terminal.move_left(50)
+            bus.publish(AppEvent.UI_MOVE, (-50, 0))
         elif hk_id == HK_ID_MOVE_RIGHT:
-            self.terminal.move_right(50)
+            bus.publish(AppEvent.UI_MOVE, (50, 0))
             
         # 5. Terminal History Navigation
         elif hk_id == HK_ID_SCROLL_UP:
-            self.terminal.scroll_up()
+            bus.publish(AppEvent.UI_SCROLL, -5)
         elif hk_id == HK_ID_SCROLL_DOWN:
-            self.terminal.scroll_down()
+            bus.publish(AppEvent.UI_SCROLL, 5)

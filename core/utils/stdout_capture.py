@@ -1,22 +1,16 @@
 import sys
 import time
 import threading
+import queue
 from typing import Callable
 
 class StdoutCapture:
     """
     Thread-safe stdout/stderr capture bridge for UI redirection.
     
-    HARDENING NOTE:
-    Redirecting stdout to a GUI signal is dangerous because a logging call
-    during signal emission can trigger another stdout write, leading to 
-    infinite recursion and a stack overflow crash.
-    
-    The implementation uses:
-    1. A thread-local recursion guard ('in_write' flag).
-    2. A Recursive Lock (RLock) for multi-threaded safety.
-    3. Fast-path writing to the original stream to ensure console logs 
-       are never lost even if the GUI bridge fails.
+    ARCHITECTURE (Sidecar 3.2):
+    Uses a single persistent background 'Drain Thread' to process output
+    batches. This prevents the 'Thread Leak' identified in 3.1.
     """
     
     def __init__(self, callback: Callable[[str], None]):
@@ -24,70 +18,94 @@ class StdoutCapture:
         self._original_stdout = sys.stdout
         self._original_stderr = sys.stderr
         self._lock = threading.RLock()
-        self._local = threading.local() # Per-thread recursion state
+        self._local = threading.local()
         self._active = False
+        self.muted = False
+        
+        # Persistent Queue management
+        self._queue = queue.Queue()
+        self._drain_thread = None
+        self._stop_event = threading.Event()
         
     def start(self):
-        """Hijack sys.stdout and sys.stderr with our hardened proxy."""
+        """Hijack sys.stdout and sys.stderr and start the drainer."""
         if self._active: 
             return
-        sys.stdout = self._CaptureStream(self.callback, self._original_stdout, self._lock, self._local)
-        sys.stderr = self._CaptureStream(self.callback, self._original_stderr, self._lock, self._local)
+            
+        self._stop_event.clear()
+        self._drain_thread = threading.Thread(target=self._drain_loop, daemon=True)
+        self._drain_thread.start()
+        
+        sys.stdout = self._CaptureStream(self.callback, self._original_stdout, self._lock, self._local, self)
+        sys.stderr = self._CaptureStream(self.callback, self._original_stderr, self._lock, self._local, self)
         self._active = True
         
     def stop(self):
-        """Restore original system streams."""
+        """Restore original system streams and stop the drainer."""
         if not self._active: 
             return
+            
         sys.stdout = self._original_stdout
         sys.stderr = self._original_stderr
+        
+        self._stop_event.set()
+        if self._drain_thread:
+            self._drain_thread.join(timeout=0.5)
+            
         self._active = False
+
+    def set_muted(self, muted: bool):
+        self.muted = muted
+
+    def _drain_loop(self):
+        """Persistent thread that batched and emits captured output."""
+        buffer = ""
+        while not self._stop_event.is_set():
+            try:
+                # Wait for at least one item
+                chunk = self._queue.get(timeout=0.05)
+                buffer += chunk
+                
+                # Try to grab remaining items without blocking
+                while not self._queue.empty():
+                    buffer += self._queue.get_nowait()
+                
+                if buffer:
+                    self.callback(buffer)
+                    buffer = ""
+                    
+            except queue.Empty:
+                continue
+            except Exception:
+                pass
         
     class _CaptureStream:
-        """Lightweight proxy that forwards output to the UI and original stream."""
-        def __init__(self, callback, original, lock, local_storage):
+        def __init__(self, callback, original, lock, local_storage, parent):
             self.callback = callback
             self.original = original
             self.lock = lock
             self.local = local_storage
+            self.parent = parent
             
         def write(self, text: str) -> int:
             if not text: 
                 return 0
             
-            # Phase 1: Direct path to original console (Essential for stability)
+            # Phase 1: Direct console path
             try:
                 self.original.write(text)
                 self.original.flush()
             except Exception:
                 pass
                 
-            # Phase 2: Redirect to UI (with Recursion Guard + Throttling)
+            # Phase 2: Queue for UI (Skip if muted)
+            if self.parent.muted:
+                return len(text)
+
             if not getattr(self.local, 'in_write', False):
                 self.local.in_write = True
                 try:
-                    # Thread-safe buffer management
-                    if not hasattr(self, '_buffer'):
-                        self._buffer = ""
-                        self._timer = None
-
-                    with self.lock:
-                        self._buffer += text
-                        
-                        # Throttle logic: Only emit every 50ms to prevent UI flooding
-                        if self._timer is None or not self._timer.is_alive():
-                            def flush_buffer():
-                                time.sleep(0.05) # 50ms batching window
-                                with self.lock:
-                                    if self._buffer:
-                                        self.callback(self._buffer)
-                                        self._buffer = ""
-                            
-                            import threading as th
-                            self._timer = th.Thread(target=flush_buffer, daemon=True)
-                            self._timer.start()
-                except Exception:
-                    pass 
+                    self.parent._queue.put(text)
                 finally:
                     self.local.in_write = False
             
@@ -100,5 +118,4 @@ class StdoutCapture:
                 pass
                 
         def __getattr__(self, name):
-            """Proxy all other stream attributes (encoding, buffer, etc.) to original."""
             return getattr(self.original, name)

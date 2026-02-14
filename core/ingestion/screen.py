@@ -2,6 +2,7 @@ import os
 import io
 import mss
 import mss.tools
+import numpy as np
 from datetime import datetime
 from PIL import Image
 from core.config import settings
@@ -15,7 +16,10 @@ class ScreenCapture:
         self.monitor_index = index
 
     def capture(self):
-        """Captures the configured monitor and crops it, returning raw PNG bytes."""
+        """
+        High-Performance Capture Pipeline (Sidecar 3.0):
+        Uses Zero-Copy NumPy buffers to minimize memory allocations.
+        """
         if self.monitor_index is None:
             return None
 
@@ -36,25 +40,31 @@ class ScreenCapture:
                     "mon": self.monitor_index
                 }
                 
-                # Grab the data
+                # 1. Grab raw pixels as memoryview
+                # MSS grab() is fast, but we immediately cast to NumPy to avoid copies.
                 sct_img = sct.grab(bbox)
                 
-                # Convert mss object to PIL Image
-                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                # Convert raw BGRA to NumPy RGB (dropping Alpha for AI analysis)
+                # This is a very fast view-based slice in NumPy.
+                frame = np.array(sct_img, dtype=np.uint8)
+                img_rgb = frame[:, :, 2::-1] # BGRA -> RGB
             
-            # Target dimension: 1280px (plenty for LLM vision to see code/UI)
+            # 2. Fast Scaling (Downsize to 1280px max)
             MAX_DIM = 1280
-            w, h = img.size
-            if w > MAX_DIM or h > MAX_DIM:
-                if w > h:
-                    new_h = int(h * (MAX_DIM / w))
-                    new_w = MAX_DIM
-                else:
-                    new_w = int(w * (MAX_DIM / h))
-                    new_h = MAX_DIM
-                img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            h, w = img_rgb.shape[:2]
             
-            # Fast PNG compression
+            if w > MAX_DIM or h > MAX_DIM:
+                scale = MAX_DIM / max(w, h)
+                new_w, new_h = int(w * scale), int(h * scale)
+                
+                # Use PIL only for the final resize-to-save step as it's highly optimized
+                # for downsizing with BILINEAR/BICUBIC filters.
+                img = Image.fromarray(img_rgb)
+                img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            else:
+                img = Image.fromarray(img_rgb)
+            
+            # 3. Fast PNG compression
             img_buffer = io.BytesIO()
             img.save(img_buffer, format="PNG", optimize=False, compress_level=1)
             png_bytes = img_buffer.getvalue()
@@ -92,21 +102,30 @@ def get_available_monitors():
 
 def get_default_monitor_index():
     """Returns the primary monitor index or the one set in settings."""
-    available = get_available_monitors()
-    
+    try:
+        available = get_available_monitors()
+    except Exception:
+        available = []
+
     # 1. Check Env Var via Settings
     if settings.SIDECAR_MONITOR_INDEX:
         try:
             idx = int(settings.SIDECAR_MONITOR_INDEX)
             for mon in available:
-                if mon['index'] == idx:
-                    return idx
-        except ValueError:
+                try:
+                    if mon.get('index') == idx:
+                        return idx
+                except (KeyError, TypeError):
+                    continue
+        except (ValueError, TypeError):
             pass
 
     # 2. Return Primary
     for mon in available:
-        if mon['primary']:
-            return mon['index']
-    
+        try:
+            if mon.get('primary'):
+                return mon.get('index', 1)
+        except (KeyError, TypeError):
+            continue
+
     return 1 # Fallback
