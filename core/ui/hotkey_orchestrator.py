@@ -64,17 +64,15 @@ class HotkeyOrchestrator:
         # 1. Primary AI Analysis Vectors
         if hk_id == HK_ID_PIXEL:
             logger.debug(f"Hotkey event: Pixel ({hk_id})")
-            self.worker.handle_pixel_request()
+            self.worker.trigger_pixel_request.emit()
             return
         elif hk_id == HK_ID_TALK:
             logger.debug(f"Hotkey event: Talk ({hk_id})")
-            self.worker.handle_verbal_request()
+            self.worker.trigger_verbal_request.emit()
             return
         elif hk_id == HK_ID_INGEST:
             logger.debug(f"Hotkey event: Ingest ({hk_id})")
-            msg = self.worker.handle_ingest_request()
-            if self.terminal and msg:
-                self.terminal.show_hud_notification(msg)
+            self.worker.trigger_ingest_request.emit()
             return
             
         # 2. Intelligence State Management
@@ -125,6 +123,6 @@ class HotkeyOrchestrator:
             
         # 5. Terminal History Navigation
         elif hk_id == HK_ID_SCROLL_UP:
-            self.terminal.scroll_up(5)
+            self.terminal.scroll_up()
         elif hk_id == HK_ID_SCROLL_DOWN:
-            self.terminal.scroll_down(5)
+            self.terminal.scroll_down()

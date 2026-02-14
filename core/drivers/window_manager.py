@@ -58,8 +58,10 @@ def set_click_through(hwnd: int, enabled: bool):
         
     result = user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
     
-    # SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
-    flags = SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+    # SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+    # We REMOVE SWP_FRAMECHANGED to prevent the DWM from re-capturing the window state
+    # which causes flickering in Zoom Screen Share.
+    flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
     user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, flags)
     
     return bool(result)

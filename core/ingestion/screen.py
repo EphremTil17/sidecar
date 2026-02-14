@@ -10,7 +10,6 @@ from core.utils import monitor_utils
 class ScreenCapture:
     def __init__(self, monitor_index=None):
         self.monitor_index = monitor_index
-        self.sct = mss.mss()
 
     def set_monitor(self, index):
         self.monitor_index = index
@@ -21,50 +20,55 @@ class ScreenCapture:
             return None
 
         try:
-            mon = self.sct.monitors[self.monitor_index]
-        except IndexError:
+            with mss.mss() as sct:
+                try:
+                    mon = sct.monitors[self.monitor_index]
+                except IndexError:
+                    return None
+
+                # Calculate crop geometry
+                margins = settings.CROP_MARGINS
+                bbox = {
+                    "top": mon["top"] + margins["top"],
+                    "left": mon["left"] + margins["left"],
+                    "width": mon["width"] - margins["left"] - margins["right"],
+                    "height": mon["height"] - margins["top"] - margins["bottom"],
+                    "mon": self.monitor_index
+                }
+                
+                # Grab the data
+                sct_img = sct.grab(bbox)
+                
+                # Convert mss object to PIL Image
+                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+            
+            # Target dimension: 1280px (plenty for LLM vision to see code/UI)
+            MAX_DIM = 1280
+            w, h = img.size
+            if w > MAX_DIM or h > MAX_DIM:
+                if w > h:
+                    new_h = int(h * (MAX_DIM / w))
+                    new_w = MAX_DIM
+                else:
+                    new_w = int(w * (MAX_DIM / h))
+                    new_h = MAX_DIM
+                img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            
+            # Fast PNG compression
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="PNG", optimize=False, compress_level=1)
+            png_bytes = img_buffer.getvalue()
+
+            # DEBUG: Save snapshot if enabled
+            if settings.SAVE_DEBUG_SNAPSHOTS:
+                self._save_debug_snapshot(png_bytes)
+
+            return png_bytes
+            
+        except Exception as e:
+            from core.utils.logger import logger
+            logger.error(f"Screen capture failed: {e}")
             return None
-
-        # Calculate crop geometry
-        margins = settings.CROP_MARGINS
-        bbox = {
-            "top": mon["top"] + margins["top"],
-            "left": mon["left"] + margins["left"],
-            "width": mon["width"] - margins["left"] - margins["right"],
-            "height": mon["height"] - margins["top"] - margins["bottom"],
-            "mon": self.monitor_index
-        }
-        
-        # Grab the data
-        sct_img = self.sct.grab(bbox)
-        
-        # Latency Optimization: Use Pillow to downsize captures for faster upload/processing
-        
-        # Convert mss object to PIL Image
-        img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-        
-        # Target dimension: 1280px (plenty for LLM vision to see code/UI)
-        MAX_DIM = 1280
-        w, h = img.size
-        if w > MAX_DIM or h > MAX_DIM:
-            if w > h:
-                new_h = int(h * (MAX_DIM / w))
-                new_w = MAX_DIM
-            else:
-                new_w = int(w * (MAX_DIM / h))
-                new_h = MAX_DIM
-            img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
-        
-        # Fast PNG compression
-        img_buffer = io.BytesIO()
-        img.save(img_buffer, format="PNG", optimize=False, compress_level=1)
-        png_bytes = img_buffer.getvalue()
-
-        # DEBUG: Save snapshot if enabled
-        if settings.SAVE_DEBUG_SNAPSHOTS:
-            self._save_debug_snapshot(png_bytes)
-
-        return png_bytes
 
     def _save_debug_snapshot(self, png_bytes):
         """Saves the capture to the debug directory for visual verification."""

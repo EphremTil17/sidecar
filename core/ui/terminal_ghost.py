@@ -9,14 +9,9 @@ class TerminalGhostWindow(QMainWindow):
     """
     Transparent terminal window that displays stdout/stderr with ANSI color support.
     
-    ARCHITECTURE NOTE:
-    We use a 'Dynamic Interactivity Polling' architecture instead of overriding 'nativeEvent'.
-    Overriding 'nativeEvent' for WM_NCHITTEST is highly unstable during window initialization
-    and caused persistent silent crashes. 
-    
-    Instead, we poll the mouse position (20Hz) and toggle the Win32 'WS_EX_TRANSPARENT' 
-    style dynamically. This allows the scrollbar to be interactive while the rest of 
-    the window remains click-through 'Ghost' content.
+    Instead, we use a 'Passive Interactivity' architecture. The window is 
+    either fully interactive (for scrolling via hotkeys) or fully ghosted. 
+    This removes the need for Win32 style thrashing which caused Screen-Share glitches.
     """
     
     def __init__(self, bg_low: float, bg_high: float, text_low: float, text_high: float, 
@@ -29,7 +24,7 @@ class TerminalGhostWindow(QMainWindow):
         self.text_low = text_low
         self.text_high = text_high
         self.max_lines = 1000
-        self._is_currently_click_through = False
+        self._is_currently_click_through = True # Default to ghosted
         self._focus_mode = False # Toggle state for Clarity/Blur mode
         self._history_cache = [] # Cache of (text, format) chunks
         
@@ -41,6 +36,11 @@ class TerminalGhostWindow(QMainWindow):
             Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Ghost Protocol 2.0: Stealth Boot
+        # Start at 0% opacity to prevent the 'Capture Flash' before 
+        # Win32 affinity flags are anchored.
+        self.setWindowOpacity(0.0)
         
         # 2. Central Widget (The visual container)
         self.central_widget = QWidget()
@@ -71,7 +71,7 @@ class TerminalGhostWindow(QMainWindow):
         font.setFixedPitch(True)
         self.terminal.setFont(font)
         
-        # 5. Global Terminal Styling
+        # 6. Global Terminal Styling (Pure UI, NO Scrollbar visibility)
         text_alpha = int(self.text_low * 255)
         self.terminal.setStyleSheet(f"""
             QPlainTextEdit {{
@@ -82,114 +82,46 @@ class TerminalGhostWindow(QMainWindow):
             }}
         """)
         self.layout.addWidget(self.terminal)
-        
-        # 6. Minimalist Ghost Scrollbar
-        self.terminal.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        # 7. Forcefully Wipe Scrollbar History / Interaction
+        self.terminal.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.terminal.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
-        # 6.5 Status Dot (Indicator for hidden text)
+        # 8. Status Dot (Indicator for hidden text)
         self.status_dot = QWidget(self.central_widget)
         self.status_dot.setFixedSize(5, 5)
         self.status_dot.setStyleSheet("background-color: rgba(0, 255, 255, 0.5); border-radius: 2px;")
-        self.status_dot.hide() # Hidden by default
+        self.status_dot.hide()
         
-        scrollbar_width = 7 # Sleek 7px visual width
-        self.terminal.verticalScrollBar().setStyleSheet(f"""
-            QScrollBar:vertical {{
-                background: transparent;
-                width: {scrollbar_width}px;
-                margin: 0px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: rgba(255, 255, 255, 0.2);
-                min-height: 40px;
-                border-radius: 3px;
-                margin: 0px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: rgba(255, 255, 255, 0.5);
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0px;
-                background: transparent;
-            }}
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
-                background: transparent;
-            }}
-        """)
-        
-        # 7. Default Window Geometry
+        # 9. Default Window Geometry
         self.resize(width, height)
         self._reposition_status_dot()
         
-        # 8. Mouse Polling for Interactivity
-        # This timer drives the hybrid hit-testing logic safely.
-        self.mouse_poll_timer = QTimer(self)
-        self.mouse_poll_timer.timeout.connect(self._update_mouse_interactivity)
-        
-        # 9. Apply Win32 Ghost Mode (Delayed for stability)
-        # We wait 500ms to ensure the window is fully mapped before applying OS-level affinity.
-        QTimer.singleShot(500, self._apply_ghost_mode)
+        # 10. Apply Win32 Ghost Mode (Immediate HWND mapping)
+        # We call this synchronously to ensure flags are set BEFORE the first draw.
+        self._apply_ghost_mode()
         
     def _apply_ghost_mode(self):
-        """Apply Win32 transparency protocols and start hit-test polling."""
+        """Apply Win32 transparency protocols."""
         try:
+            # Force mapping of the window handle
             hwnd = int(self.winId())
+            
+            # Apply capture exclusion immediately
             if apply_ghost_mode(hwnd):
                 logger.success("Ghost Protocol applied to terminal window.")
-            set_always_on_top(hwnd, True)
             
-            # Start mouse polling (50ms interval = snappy 20fps hit-testing)
-            self.mouse_poll_timer.start(50)
-            logger.success("Dynamic Hit-Testing ACTIVE (Scrollbar interaction ready)")
+            set_always_on_top(hwnd, True)
+            set_click_through(hwnd, True)
+            self._is_currently_click_through = True
+            
+            # Stealth Boot Release: Now that the window is hidden from capture,
+            # we can safely show it to the local user.
+            QTimer.singleShot(100, lambda: self.setWindowOpacity(1.0))
+            
         except Exception as e:
             logger.error(f"Critical error applying ghost mode: {e}")
-            
-    def _update_mouse_interactivity(self):
-        """
-        Toggles window click-through state based on mouse proximity to the scrollbar.
-        This provides a 'Solid' feel for interactions without breaking the 'Ghost' experience.
-        """
-        if not self.isVisible():
-            return
-
-        try:
-            hwnd = int(self.winId())
-            cursor_pos = QCursor.pos() # Pure Qt global mouse position
-            
-            sb = self.terminal.verticalScrollBar()
-            should_be_interactive = False
-            
-            if sb.isVisible():
-                # 1. Precise Scrollbar Hit
-                sb_rect = sb.rect()
-                sb_global_pos = sb.mapToGlobal(sb_rect.topLeft())
-                sb_global_rect = sb_rect.translated(sb_global_pos)
-                
-                # 2. Virtual Interaction Zone (25px margin from right edge)
-                # This ensures the user can easily trigger the scrollbar without 
-                # needing pixel-perfect precision on the 7px visual bar.
-                window_rect = self.geometry()
-                right_edge_margin = 25
-                interaction_zone = QRect(
-                    window_rect.right() - right_edge_margin,
-                    window_rect.top(),
-                    right_edge_margin,
-                    window_rect.height()
-                )
-                
-                if sb_global_rect.contains(cursor_pos) or interaction_zone.contains(cursor_pos):
-                    should_be_interactive = True
-            
-            # Update the Win32 Layered style ONLY when the state changes.
-            is_click_through = not should_be_interactive
-            if is_click_through != self._is_currently_click_through:
-                set_click_through(hwnd, is_click_through)
-                self._is_currently_click_through = is_click_through
-                
-        except Exception:
-            # Silent fail for hit-testing to prevent UI stutters
-            pass
+            self.setWindowOpacity(1.0) # Fallback to visibility if ghosting fails
 
     def _reposition_status_dot(self):
         """Keep the status dot in the top-right corner."""
@@ -269,6 +201,10 @@ class TerminalGhostWindow(QMainWindow):
         
         # Restore scroll position to prevent reset during toggle
         v_scroll.setValue(scroll_pos)
+
+    def force_repaint(self):
+        """Force a full alpha-buffer refresh to prevent DWM hibernation."""
+        self.update() # Qt native repaint request
 
     def show_hud_notification(self, message: str):
         """Displays a concise HUD message in the terminal."""
@@ -362,10 +298,10 @@ class TerminalGhostWindow(QMainWindow):
     def move_right(self, pixels: int = 50):
         self.move(self.x() + pixels, self.y())
         
-    def scroll_up(self, steps: int = 3):
+    def scroll_up(self):
         scrollbar = self.terminal.verticalScrollBar()
-        scrollbar.setValue(scrollbar.value() - (scrollbar.singleStep() * steps)) 
+        scrollbar.setValue(scrollbar.value() - scrollbar.singleStep() * 5) 
         
-    def scroll_down(self, steps: int = 3):
+    def scroll_down(self):
         scrollbar = self.terminal.verticalScrollBar()
-        scrollbar.setValue(scrollbar.value() + (scrollbar.singleStep() * steps))
+        scrollbar.setValue(scrollbar.value() + scrollbar.singleStep() * 5)

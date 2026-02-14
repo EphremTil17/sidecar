@@ -85,6 +85,7 @@ class SidecarApp(QObject):
         self.worker.signal_status_update.connect(self._on_status_update)
         if self.terminal:
             self.worker.signal_hud_notification.connect(self.terminal.show_hud_notification)
+            self.worker.signal_heartbeat.connect(self.terminal.force_repaint)
         
         self._response_active = False
         self._inline_active = False

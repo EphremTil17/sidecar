@@ -1,4 +1,5 @@
 import sys
+import time
 import threading
 from typing import Callable
 
@@ -61,15 +62,32 @@ class StdoutCapture:
             except Exception:
                 pass
                 
-            # Phase 2: Redirect to UI (with Recursion Guard)
-            # We only emit the signal if we aren't already processing a write from this thread.
+            # Phase 2: Redirect to UI (with Recursion Guard + Throttling)
             if not getattr(self.local, 'in_write', False):
                 self.local.in_write = True
                 try:
+                    # Thread-safe buffer management
+                    if not hasattr(self, '_buffer'):
+                        self._buffer = ""
+                        self._timer = None
+
                     with self.lock:
-                        self.callback(text)
+                        self._buffer += text
+                        
+                        # Throttle logic: Only emit every 50ms to prevent UI flooding
+                        if self._timer is None or not self._timer.is_alive():
+                            def flush_buffer():
+                                time.sleep(0.05) # 50ms batching window
+                                with self.lock:
+                                    if self._buffer:
+                                        self.callback(self._buffer)
+                                        self._buffer = ""
+                            
+                            import threading as th
+                            self._timer = th.Thread(target=flush_buffer, daemon=True)
+                            self._timer.start()
                 except Exception:
-                    pass # Error in UI callback should not break the logger
+                    pass 
                 finally:
                     self.local.in_write = False
             
