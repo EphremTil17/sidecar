@@ -167,6 +167,24 @@ class FireworksEngine(BaseEngine):
         yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=f"Fireworks engine re-tasked to {skill_data['identity'][:30]}...")
         yield SidecarEvent(SidecarEventType.FINISH)
 
+    def truncate_history(self, max_turns: int = 10):
+        """
+        Rank-Weighted Truncation (Sidecar 3.0):
+        Preserves the system prompt for caching and the latest turns for context.
+        """
+        if len(self.messages) <= max_turns:
+            return
+
+        # Rank 1: System Message (Anchor for cache)
+        system_msg = [self.messages[0]]
+        
+        # Rank 2: Recent turns
+        recent_count = max_turns - 1
+        recents = self.messages[-recent_count:] if recent_count > 0 else []
+        
+        self.messages = system_msg + recents
+        logger.info(f"Fireworks Context Truncated: {len(self.messages)} turns.")
+
     def get_model_name(self):
         return f"FIREWORKS ({self.model_id.split('/')[-1]})"
 

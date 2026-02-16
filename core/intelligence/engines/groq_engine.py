@@ -121,6 +121,27 @@ class GroqEngine(BaseEngine):
         return f"GROQ ({self.model_id.split('/')[-1]})"
 
     def toggle_model(self):
-        # Groq engine doesn't currently toggle but we could switch between Maverick and Scout
-        print("[i] Groq Maverick is currently fixed for performance.")
+        # Groq engine doesn't currently toggle but we could switch between model IDs
         return False
+
+    def truncate_history(self, max_turns: int = 10):
+        """
+        Rank-Weighted Truncation (Sidecar 3.0):
+        Preserves the system instruction and the latest turns while 
+        purging the conversation middle to prevent context window pressure.
+        """
+        if len(self.messages) <= max_turns:
+            return
+
+        # Rank 1: System Instruction (Absolute Priority)
+        system_msg = [self.messages[0]]
+        
+        # Rank 2: Recent Context
+        # We take max_turns - 1 (for system)
+        recent_count = max_turns - 1
+        recents = self.messages[-recent_count:] if recent_count > 0 else []
+        
+        # Combine
+        self.messages = system_msg + recents
+        from core.utils.logger import logger
+        logger.info(f"Groq Context Truncated: {len(self.messages)} turns remaining.")

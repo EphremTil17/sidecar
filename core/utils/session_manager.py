@@ -11,6 +11,7 @@ from core.utils.setup import ensure_config, update_env_config, validate_api_keys
 from core.utils.session_cache import SessionCache
 from core.utils.hardware_director import HardwareDirector
 from core.utils.knowledge_director import KnowledgeDirector
+from core.types.registry import ComponentRegistry
 from core.ui.cli import CLI
 
 class SessionManager:
@@ -38,6 +39,20 @@ class SessionManager:
             "session_context": "",
             "overlay_geometry": None # [x, y, w, h]
         }
+        self._cleanup_hooks = []
+
+    def register_cleanup(self, hook):
+        """Register a callback for graceful shutdown."""
+        self._cleanup_hooks.append(hook)
+
+    def shutdown(self):
+        """Execute all registered cleanup hooks."""
+        print("\n[i] Orchestrating Graceful Shutdown...")
+        for hook in reversed(self._cleanup_hooks):
+            try:
+                hook()
+            except Exception as e:
+                print(f"[!] Shutdown Hook Error: {e}")
 
     def bootstrap(self) -> dict:
         """Entry point for application lifecycle."""
@@ -62,12 +77,12 @@ class SessionManager:
         CLI.print_welcome(self._state["monitor_index"], self._state["skill_name"], self.brain.get_model_name())
         CLI.print_ready()
 
-        return {
-            "brain": self.brain,
-            "capture_tool": self.capture_tool,
-            "recorder": self.recorder,
-            "skill_manager": self.skill_manager
-        }
+        return ComponentRegistry(
+            brain=self.brain,
+            capture_tool=self.capture_tool,
+            recorder=self.recorder,
+            skill_manager=self.skill_manager
+        )
 
     def _attempt_fast_boot(self, cache: dict) -> bool:
         """Validates and restores session from cache."""

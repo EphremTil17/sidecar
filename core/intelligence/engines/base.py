@@ -32,3 +32,8 @@ class BaseEngine(ABC):
     def add_user_message(self, content: str):
         """Adds a user message to the session history."""
         pass
+
+    @abstractmethod
+    def truncate_history(self, max_turns: int):
+        """Truncates history based on rank-weighted importance."""
+        pass

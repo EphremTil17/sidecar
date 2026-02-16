@@ -95,6 +95,7 @@ FIREWORKS_MODEL = os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/kimi-k
 GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 THINKING_LEVEL = os.getenv("THINKING_LEVEL", "high")
 AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 16000))
+MAX_CHAT_TURNS = int(os.getenv("MAX_CHAT_TURNS", 12))
 
 # --- Ghost Configuration ---
 GHOST_MODE_AUTO = os.getenv("GHOST_MODE_AUTO", "False").lower() == "true"

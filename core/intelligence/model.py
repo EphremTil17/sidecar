@@ -98,6 +98,11 @@ class SidecarBrain:
 
     def analyze_image_stream(self, png_bytes: bytes, additional_text: str = "") -> Generator[SidecarEvent, None, None]:
         """Streams analysis with injected visual (current + vaulted) and verbal context."""
+        # Intelligence Optimization: Auto-truncate history before long requests
+        if self.active_engine:
+            max_turns = getattr(settings, 'MAX_CHAT_TURNS', 12)
+            self.active_engine.truncate_history(max_turns)
+            
         context = self.vision_vault.get_context()
         return self.active_engine.stream_analysis(png_bytes, additional_text, context_images=context)
 
@@ -111,6 +116,11 @@ class SidecarBrain:
         if not transcription:
             yield SidecarEvent(SidecarEventType.ERROR, content="No transcription data received.")
             return
+
+        # Intelligence Optimization: Auto-truncate history
+        if self.active_engine:
+            max_turns = getattr(settings, 'MAX_CHAT_TURNS', 12)
+            self.active_engine.truncate_history(max_turns)
 
         # Prepare follow-up message
         self.active_engine.add_user_message(f"[CONVERSATION TURN]: {transcription}")

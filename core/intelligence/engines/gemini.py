@@ -4,6 +4,7 @@ from typing import Generator
 from core.config import settings
 from core.intelligence.engines.base import BaseEngine
 from core.intelligence.events import SidecarEvent, SidecarEventType
+from core.utils.logger import logger
 
 class GeminiEngine(BaseEngine):
     def __init__(self, api_key):
@@ -104,7 +105,30 @@ Please acknowledge you have absorbed these new instructions."""
         return self.use_pro_model
 
     def add_user_message(self, content: str):
-        # The Gemini chat session manages history automatically when send_message is called.
-        # If we need to inject history without a response, we'd manually update session.history.
-        # But for Sidecar, we usually want the response immediately after transcription.
+        """Adds a user message to the session history (managed by genai.Client)."""
         pass
+
+    def truncate_history(self, max_turns: int = 10):
+        """
+        Rank-Weighted Truncation (Sidecar 3.0):
+        Preserves the conversation start (anchors) and the latest turns (recency),
+        while purging the 'Middle-Fog' to save context window.
+        """
+        if not self.chat_session or not self.chat_session._curated_history:
+            return
+
+        history = self.chat_session._curated_history
+        if len(history) <= max_turns:
+            return
+
+        # Rank 1: Session Anchors (First 2 messages: Initial Greeting/Setup)
+        anchors = history[:2]
+        
+        # Rank 2: Recent Context (The tail of the conversation)
+        # We take max_turns - 2 to fill the remaining budget.
+        recent_count = max_turns - 2
+        recents = history[-recent_count:] if recent_count > 0 else []
+        
+        # Compact history
+        self.chat_session._curated_history = anchors + recents
+        logger.info(f"Context Truncated: {len(history)} -> {len(self.chat_session._curated_history)} turns.")

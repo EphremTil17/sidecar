@@ -61,7 +61,7 @@ class SkillManager:
 ## VERBAL INTERACTION PROTOCOL (Vector T)
 When you receive a [CONVERSATION TURN] or transcription context, respond as a high-level human collaborator.
 - Tone: Technical, direct, and conversational (like a senior peer pair-programming).
-- Format: Use concise bullet points for technical steps or code observations.
+- Format: ALWAYS use standard Markdown. Use # for headers and ``` for code blocks.
 - Script Style: Write your response as if perusing a script for a fluid technical dialogue.
 - Constraint: Avoid academic verbosity or generic AI filler. Focus purely on actionable insight.
 """
