@@ -1,33 +1,27 @@
 import time
-from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
+from PyQt6.QtCore import QThread, QMutex, QMutexLocker
 from core.intelligence.events import SidecarEventType
 from core.ingestion.orchestrator import RecordingState
 from core.utils.logger import logger
+from core.types.registry import ComponentRegistry
+from core.utils.events import bus, AppEvent, AppState
 
 class SidecarWorker(QThread):
     """
     Background worker that runs the SidecarAI processing logic.
     Decouples intensive AI analysis from the GUI main thread to prevent UI freezing.
     """
-    signal_chunk_update = pyqtSignal(str, str)  # Stream text chunks to UI
-    signal_status_update = pyqtSignal(str)      # Update UI status text
-    signal_recording_toggle = pyqtSignal(bool)  # Sync recording UI state
-    signal_hud_notification = pyqtSignal(str)   # Logic-to-UI HUD trigger
-    signal_heartbeat = pyqtSignal()            # Keep-alive for DWM compositor
+    # Logic-to-UI communication is now handled via the AppEventBus (bus)
+    # to maintain a strict decoupled architecture.
 
-    # Slots for true async triggering (Ghost Protocol 2.0)
-    trigger_pixel_request = pyqtSignal()
-    trigger_verbal_request = pyqtSignal()
-    trigger_ingest_request = pyqtSignal()
-
-    def __init__(self, components: dict):
+    def __init__(self, components: ComponentRegistry):
         super().__init__()
-        self.brain = components["brain"]
-        self.capture_tool = components["capture_tool"]
-        self.recorder = components["recorder"]
-        self.skill_manager = components["skill_manager"]
+        self.brain = components.brain
+        self.capture_tool = components.capture_tool
+        self.recorder = components.recorder
+        self.skill_manager = components.skill_manager
         
-        # Thread Safety: Use a mutex to prevent race conditions on processing turns
+        # Thread Safety
         self._lock = QMutex()
         self.processing_turn = False
         
@@ -46,43 +40,47 @@ class SidecarWorker(QThread):
         
         try:
             start_time = time.time()
-            self.signal_status_update.emit("Capturing screen...")
+            bus.publish(AppEvent.AGENT_STATUS_UPDATE, "Capturing screen...")
             
             png_bytes = self.capture_tool.capture()
             if not png_bytes: 
-                self.signal_chunk_update.emit("[!] Capture Failed.\n", "a")
+                bus.publish(AppEvent.AGENT_CHUNK_UPDATE, ("[!] Capture Failed.\n", "a"))
                 return
 
-            self.signal_status_update.emit(f"Analyzing view ({self.brain.get_model_name()})...")
-            self.signal_heartbeat.emit() # Initial pulse
+            bus.publish(AppEvent.AGENT_STATUS_UPDATE, f"Analyzing view ({self.brain.get_model_name()})...")
+            bus.publish(AppEvent.AGENT_HEARTBEAT) # Initial pulse
             
             stream = self.brain.analyze_image_stream(png_bytes)
             
             first_chunk = True
+            had_error = False
             for event in stream:
                 if event.event_type == SidecarEventType.TEXT_CHUNK and event.content:
                     if first_chunk:
                         latency = time.time() - start_time
-                        self.signal_status_update.emit(f"Latency: {latency:.2f}s | Response Streaming...")
+                        bus.publish(AppEvent.AGENT_STATUS_UPDATE, f"Latency: {latency:.2f}s | Response Streaming...")
                         first_chunk = False
-                    self.signal_chunk_update.emit(event.content, "a")
+                    bus.publish(AppEvent.AGENT_CHUNK_UPDATE, (event.content, "a"))
                 elif event.event_type == SidecarEventType.STATUS:
-                    self.signal_status_update.emit(event.content)
+                    bus.publish(AppEvent.AGENT_STATUS_UPDATE, event.content)
                 elif event.event_type == SidecarEventType.ERROR:
+                    had_error = True
                     logger.error(f"Vector A Error: {event.content}")
-                    self.signal_chunk_update.emit(f"\n[!] Error: {event.content}\n", "a")
+                    bus.publish(AppEvent.AGENT_CHUNK_UPDATE, (f"\n[!] Error: {event.content}\n", "a"))
             
-            print("\n")
-            total_time = time.time() - start_time
-            logger.success(f"Vision Analysis Complete. (Total: {total_time:.2f}s)")
+            if not had_error:
+                print("\n")
+                total_time = time.time() - start_time
+                logger.success(f"Pixel Analysis Complete. (Total: {total_time:.2f}s)")
+                bus.publish(AppEvent.AGENT_HEARTBEAT)
             
         except Exception as e:
             logger.error(f"Vector A Exception: {e}")
-            self.signal_chunk_update.emit(f"\n[!] Error: {str(e)}\n", "a")
+            bus.publish(AppEvent.AGENT_CHUNK_UPDATE, (f"\n[!] Error: {str(e)}\n", "a"))
         finally:
             with QMutexLocker(self._lock):
                 self.processing_turn = False
-            self.signal_status_update.emit("READY")
+            bus.publish(AppEvent.AGENT_STATUS_UPDATE, "READY")
 
     def handle_ingest_request(self):
         """Silent Ingestion: Adds context to the brain vault without triggering AI analysis."""
@@ -111,62 +109,102 @@ class SidecarWorker(QThread):
             new_state, audio_text = self.recorder.toggle()
             
             if new_state == RecordingState.RECORDING:
-                self.signal_recording_toggle.emit(True)
-                self.signal_status_update.emit("RECORDING...")
+                bus.publish(AppEvent.AGENT_STATUS_UPDATE, "RECORDING...")
                 return
 
-            self.signal_recording_toggle.emit(False)
+            # Recording stopped, processing transcription
             
             if audio_text:
                 start_time = time.time()
                 with QMutexLocker(self._lock):
                     self.processing_turn = True
-                self.signal_status_update.emit(f"Processing Intent: {audio_text[:30]}...")
-                self.signal_heartbeat.emit() # Initial pulse
+                bus.publish(AppEvent.AGENT_STATUS_UPDATE, f"Processing Intent: {audio_text[:30]}...")
+                bus.publish(AppEvent.AGENT_HEARTBEAT) # Initial pulse
                 
                 stream = self.brain.analyze_verbal_stream(audio_text)
                 
                 first_chunk = True
+                had_error = False
                 for event in stream:
                     if event.event_type == SidecarEventType.TEXT_CHUNK and event.content:
                         if first_chunk:
                             latency = time.time() - start_time
-                            self.signal_status_update.emit(f"Latency: {latency:.2f}s | Response Streaming...")
+                            bus.publish(AppEvent.AGENT_STATUS_UPDATE, f"Latency: {latency:.2f}s | Response Streaming...")
                             first_chunk = False
-                        self.signal_chunk_update.emit(event.content, "b")
+                        bus.publish(AppEvent.AGENT_CHUNK_UPDATE, (event.content, "b"))
                     elif event.event_type == SidecarEventType.STATUS:
-                        self.signal_status_update.emit(event.content)
+                        bus.publish(AppEvent.AGENT_STATUS_UPDATE, event.content)
                     elif event.event_type == SidecarEventType.ERROR:
+                        had_error = True
                         logger.error(f"Vector B Error: {event.content}")
-                        self.signal_chunk_update.emit(f"\n[!] Error: {event.content}\n", "b")
+                        bus.publish(AppEvent.AGENT_CHUNK_UPDATE, (f"\n[!] Error: {event.content}\n", "b"))
                 
-                print("\n")
-                total_time = time.time() - start_time
-                logger.success(f"Verbal Analysis Complete. (Total: {total_time:.2f}s)")
+                if not had_error:
+                    print("\n")
+                    total_time = time.time() - start_time
+                    logger.success(f"Verbal Analysis Complete. (Total: {total_time:.2f}s)")
+                    bus.publish(AppEvent.AGENT_HEARTBEAT)
             else:
-                self.signal_status_update.emit("No input detected.")
+                bus.publish(AppEvent.AGENT_STATUS_UPDATE, "No input detected.")
                 
         except Exception as e:
             logger.error(f"Vector B Exception: {e}")
-            self.signal_chunk_update.emit(f"\n[!] Error: {str(e)}\n", "b")
+            bus.publish(AppEvent.AGENT_CHUNK_UPDATE, (f"\n[!] Error: {str(e)}\n", "b"))
         finally:
             if self.recorder.is_idle:
                 with QMutexLocker(self._lock):
                     self.processing_turn = False
-                self.signal_status_update.emit("READY")
+                bus.publish(AppEvent.AGENT_STATUS_UPDATE, "READY")
 
     def run(self):
         """Main event loop for the worker thread."""
-        # Connect internal signals to handlers to ensure they run ON THIS THREAD
-        self.trigger_pixel_request.connect(self.handle_pixel_request)
-        self.trigger_verbal_request.connect(self.handle_verbal_request)
-        self.trigger_ingest_request.connect(self._handle_ingest_internal)
+        # Connect to the global Event Bus
+        bus.dispatch.connect(self._on_event)
         
         logger.info("Sidecar Worker thread active (Ghost Protocol 2.0)")
         self.exec()
+
+    def _on_event(self, event, payload):
+        """Central event dispatcher for the worker thread."""
+        if event == AppEvent.TRIGGER_PIXEL:
+            self.handle_pixel_request()
+        elif event == AppEvent.TRIGGER_TALK:
+            self.handle_verbal_request()
+        elif event == AppEvent.TRIGGER_INGEST:
+            self._handle_ingest_internal()
+        elif event == AppEvent.INTELLIGENCE_TOGGLE_MODEL:
+            self._handle_model_toggle()
+        elif event == AppEvent.INTELLIGENCE_SWITCH_ENGINE:
+            self._handle_engine_switch()
+        elif event == AppEvent.INTELLIGENCE_SWITCH_SKILL:
+            self._handle_skill_switch()
+
+    def _handle_model_toggle(self):
+        """Worker-side handler for model toggling (Flash <-> Pro)."""
+        self.brain.toggle_model()
+        msg = f"Active model: {self.brain.get_model_name()}"
+        logger.info(msg)
+        bus.publish(AppEvent.AGENT_STATUS_UPDATE, msg)
+
+    def _handle_engine_switch(self):
+        """Worker-side handler for engine cycling."""
+        msg = self.brain.switch_engine()
+        logger.info(msg)
+        bus.publish(AppEvent.AGENT_STATUS_UPDATE, msg)
+
+    def _handle_skill_switch(self):
+        """Worker-side handler for skill persona rotation."""
+        msg = self.brain.switch_skill()
+        logger.info(msg)
+        bus.publish(AppEvent.AGENT_STATUS_UPDATE, msg)
 
     def _handle_ingest_internal(self):
         """Internal bridge for ingestion that emits the HUD signal."""
         msg = self.handle_ingest_request()
         if msg:
-            self.signal_hud_notification.emit(msg)
+            bus.publish(AppEvent.AGENT_STATUS_UPDATE, msg)
+
+    def stop(self):
+        """Standardized stop for cleanup registration."""
+        self.quit()
+        self.wait()

@@ -13,6 +13,7 @@
 - **Fast-Boot Sequence:** Get to **READY** state in <3 seconds without manual configuration.
 - **Prompt Pivoting:** Hot-swap personas mid-session while maintaining full conversational history and state.
 - **Conversational Transcription:** Spoken words act as the "most recent turn" in the conversation flow.
+- **High-Fidelity Rendering:** Native block-level syntax highlighting for code snippets with dynamic language detection (JS, Python, C++, etc.).
 - **Extreme Speed Engine:** Groq Engine integration for sub-second reasoning and transcription using **Whisper-large-v3-turbo**.
 
 ---
@@ -44,7 +45,8 @@ The project follows a modular Strategy Pattern designed for low-latency context 
 - **Intelligence**: The brain of the system. Manages state, chat history, and routes context to the active engine. Includes the `GroqTranscriptionEngine` for ultra-fast STT. Implements **Context Bloat Protection** by automatically pruning images in multi-turn conversations.
 - **Engines**: Deeply optimized implementations for streaming text, images, and audio transcriptions using a unified event-driven model.
 - **Skills**: A file-based system allowing users to define specialized agents (e.g., Coding, Debugging, Writing) that can be swapped mid-session.
-- **UI & Utils**: Provides a premium terminal experience with a specialized status HUD and critical system utilities for environment setup.
+- **UI & Utils**: Provides a premium, high-fidelity experience with a specialized status HUD and a decoupled event-driven rendering pipeline. Includes a **Native Syntax Highlighting** engine that provides IDE-grade clarity within the assistant window.
+- **AppEventBus**: A centralized communication hub that standardizes telemetry across the system, ensuring thread-safe UI updates and high-frequency data handling without performance bottlenecks.
 
 ---
 
@@ -59,6 +61,7 @@ The project follows a modular Strategy Pattern designed for low-latency context 
 | **E** | **Engine**  | Switch Engine | Toggle between Gemini and Groq        |
 | **S** | **Skill**   | Swap Skill    | Pivot model identity/instructions     |
 | **M** | **Model**   | Toggle Model  | Toggle Fast/Deep models (Gemini)      |
+| **H** | **Focus**   | Sync/Toggle   | Toggle Focus Mode                     |
 
 ## Transcription & Philosophy: The Conversational 'Now'
 
@@ -88,10 +91,10 @@ The **Transcription Guideline** is the **Current Moment** of the conversation. S
 # Install dependencies
 .\.venv\Scripts\pip install -r requirements.txt
 
-# Run the Sidecar in standard mode
+# Run in standard Terminal Mode
 $env:PYTHONPATH="."; .\.venv\Scripts\python.exe sidecar.py
 
-# Run with the Transparent Ghost Overlay
+# Run with the Ambient Overlay
 $env:PYTHONPATH="."; .\.venv\Scripts\python.exe sidecar.py --ghost
 
 # Run with Screenshot Debugging (saves captures to /debug_snapshots)
@@ -100,9 +103,13 @@ $env:PYTHONPATH="."; .\.venv\Scripts\python.exe sidecar.py --debug
 
 ### 3. Special Execution Modes
 
-#### **Ghost Mode (`--ghost`)**
+#### **Ambient Overlay (`--ghost`)**
 
-Launches a transparent, always-on-top terminal overlay. This window is **invisible to screen capture** (e.g., Zoom, Teams, or regular screenshots) via the Win32 `SetWindowDisplayAffinity` protocol. You can move, resize, and scroll it via hotkeys or the minimalist scrollbar on the far right.
+Launches an always-on-top assistant interface.
+
+- **Dynamic Highlighting**: Automatically detects text or markdown blocks and applies high-fidelity syntax themes.
+- **Alpha-Synced Sync**: Integrated transparency umbilical ensures that text alpha remains synced with the UI background for a modern, seamless look.
+- **Intelligent History**: Automatic document trimming maintains speed while preserving critical conversational milestones.
 
 #### **Debug Mode (`--debug`)**
 
