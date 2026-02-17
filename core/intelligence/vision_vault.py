@@ -31,6 +31,16 @@ class VisionVault:
         """Returns the current list of vaulted context items."""
         return self._items.copy()
 
+    def flush(self) -> List[VaultItem]:
+        """
+        Returns the current context items and empties the vault.
+        Used for 'One-Shot' ingestion where context is sent once 
+        and then managed by the model's internal history.
+        """
+        items = self._items.copy()
+        self.clear()
+        return items
+
     def clear(self):
         """Empties the vault."""
         self._items = []

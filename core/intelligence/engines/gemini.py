@@ -26,6 +26,8 @@ class GeminiEngine(BaseEngine):
             )
         )
         self.chat_session = self.client.chats.create(model=model_id, config=config)
+        # Web-Parity 3.0: We use a custom reference to history to ensure we can modify parts safely.
+        # Note: self.chat_session._curated_history is the source of truth for Gemini 2.0 SDK.
 
     def stream_analysis(self, png_bytes: bytes, additional_text: str = "", context_images: list = None) -> Generator[SidecarEvent, None, None]:
         if not self.chat_session:
@@ -34,22 +36,31 @@ class GeminiEngine(BaseEngine):
         try:
             content_parts = []
             
-            # 1. Prepend supporting context from the vault
-            if context_images:
-                content_parts.append("### SUPPORTING VISUAL CONTEXT ###\n(The following images provide background context for my request below)")
-                for item in context_images:
-                    img_part = types.Part.from_bytes(data=item.image_bytes, mime_type="image/png")
-                    content_parts.append(img_part)
-                content_parts.append("\n### END OF CONTEXT ###\n")
-
-            # 2. Add current task content
+            # 1. PRIMARY TASK VIEW (Highest Priority)
             if png_bytes:
-                content_parts.append("### PRIMARY TASK VIEW ###")
+                content_parts.append("### PRIMARY TASK VIEW (PRIORITY) ###\nFocus your analysis here first.")
                 image_part = types.Part.from_bytes(data=png_bytes, mime_type="image/png")
                 content_parts.append(image_part)
             
+            # 2. SUPPORTING CONTEXT (Supplementary)
+            if context_images:
+                content_parts.append("### SUPPLEMENTARY CONTEXT ###\nFor background reference only.")
+                for item in context_images:
+                    img_part = types.Part.from_bytes(data=item.image_bytes, mime_type="image/png")
+                    content_parts.append(img_part)
+            
             if additional_text:
                 content_parts.append(f"\n[USER REQUEST]: {additional_text}")
+
+            # 3. Web-Parity 3.0: Memorization Directive
+            # Forces the model to transcribe/reference visual data into text for persistent memory.
+            if png_bytes or context_images:
+                content_parts.append(
+                    "\n[MEMORIZATION DIRECTIVE]: This turn contains vital visual context. "
+                    "In your response, ensure you transcribe or reference key details (endpoints, code, logic, information, facts, data, etc) "
+                    "from the images into your reply. This ensures the information stays in our textual memory "
+                    "after the pixels are offloaded."
+                )
             
             if not content_parts:
                  yield SidecarEvent(SidecarEventType.ERROR, content="No visual or verbal context provided.")
@@ -66,7 +77,11 @@ class GeminiEngine(BaseEngine):
                             yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=part.text)
                     
             yield SidecarEvent(SidecarEventType.FINISH)
-                    
+            
+            # Post-Turn Execution: Instant Visual Offloading (Web-Parity 3.0)
+            # We strip bytes immediately so the next request is lean.
+            self.manage_context()
+            
         except Exception as e:
             yield SidecarEvent(SidecarEventType.ERROR, content=str(e))
 
@@ -108,27 +123,38 @@ Please acknowledge you have absorbed these new instructions."""
         """Adds a user message to the session history (managed by genai.Client)."""
         pass
 
-    def truncate_history(self, max_turns: int = 10):
+    def manage_context(self):
         """
-        Rank-Weighted Truncation (Sidecar 3.0):
-        Preserves the conversation start (anchors) and the latest turns (recency),
-        while purging the 'Middle-Fog' to save context window.
+        Instant Visual Offloading (Web-Parity 3.6):
+        Strips heavy binary data (images) from ALL messages in history,
+        preserving only the text and thinking parts. This prevents 
+        redundant multi-MB uploads on every turn.
         """
-        if not self.chat_session or not self.chat_session._curated_history:
+        if not self.chat_session or not hasattr(self.chat_session, '_curated_history'):
             return
 
         history = self.chat_session._curated_history
-        if len(history) <= max_turns:
-            return
+        scrubbed_count = 0
+        
+        for content in history:
+            if hasattr(content, 'parts'):
+                original_len = len(content.parts)
+                # Keep only text/thought parts, discard inline_data (images)
+                # Note: We replace inline_data with a tiny text placeholder for structural integrity
+                new_parts = []
+                for p in content.parts:
+                    if hasattr(p, 'inline_data') and p.inline_data:
+                        new_parts.append(types.Part.from_text(text="[OFFLOADED IMAGE: Processed Context]"))
+                        scrubbed_count += 1
+                    else:
+                        new_parts.append(p)
+                content.parts = new_parts
 
-        # Rank 1: Session Anchors (First 2 messages: Initial Greeting/Setup)
-        anchors = history[:2]
-        
-        # Rank 2: Recent Context (The tail of the conversation)
-        # We take max_turns - 2 to fill the remaining budget.
-        recent_count = max_turns - 2
-        recents = history[-recent_count:] if recent_count > 0 else []
-        
-        # Compact history
-        self.chat_session._curated_history = anchors + recents
-        logger.info(f"Context Truncated: {len(history)} -> {len(self.chat_session._curated_history)} turns.")
+        if scrubbed_count > 0:
+            logger.info(f"Gemini Visuals Offloaded: {scrubbed_count} image(s) converted to text placeholders.")
+
+    def reset_session(self):
+        """Hard-reset the chat session to clear history and vision state."""
+        logger.info("Resetting Gemini session...")
+        self.chat_session = None
+        self.init_session(self.current_system_prompt)

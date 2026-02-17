@@ -93,9 +93,8 @@ MODEL_PRO = os.getenv("MODEL_PRO", "models/gemini-3-pro-preview")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
 FIREWORKS_MODEL = os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/kimi-k2p5")
 GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
-THINKING_LEVEL = os.getenv("THINKING_LEVEL", "high")
+THINKING_LEVEL = os.getenv("THINKING_LEVEL", "low")
 AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 16000))
-MAX_CHAT_TURNS = int(os.getenv("MAX_CHAT_TURNS", 12))
 
 # --- Ghost Configuration ---
 GHOST_MODE_AUTO = os.getenv("GHOST_MODE_AUTO", "False").lower() == "true"

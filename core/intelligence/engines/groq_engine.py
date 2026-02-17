@@ -23,33 +23,51 @@ class GroqEngine(BaseEngine):
     def stream_analysis(self, png_bytes: bytes, additional_text: str = "", context_images: list = None) -> Generator[SidecarEvent, None, None]:
         user_content = []
         
-        # 1. Prepend supporting context from the vault
+        # 1. PRIMARY TASK VIEW (Highest Priority)
+        # We process the live screenshot first to establish the immediate problem.
+        if png_bytes:
+            base64_image = base64.b64encode(png_bytes).decode('utf-8')
+            user_content.append({"type": "text", "text": "### PRIMARY TASK VIEW (PRIORITY) ###\nThis is the live view of my current screen. Focus your analysis here first."})
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+            })
+
+        # 2. SUPPORTING CONTEXT (Supplementary)
+        # We cap Groq at 5 total images, leaving 4 slots for vault context.
+        max_total_images = 5
+        current_image_count = 1 if png_bytes else 0
+        max_context_images = max_total_images - current_image_count
+        
         if context_images:
-            user_content.append({"type": "text", "text": "### SUPPORTING VISUAL CONTEXT ###\n(The following images provide background context for my request below)"})
+            if len(context_images) > max_context_images:
+                yield SidecarEvent(SidecarEventType.STATUS, content=f"Groq Limit: Capping vault to most recent {max_context_images} images.")
+                context_images = context_images[-max_context_images:]
+
+            user_content.append({"type": "text", "text": "### SUPPLEMENTARY CONTEXT ###\nThe following images are for background documentation and reference only."})
             for item in context_images:
                 b64_img = base64.b64encode(item.image_bytes).decode('utf-8')
                 user_content.append({
                     "type": "image_url",
                     "image_url": {"url": f"data:image/png;base64,{b64_img}"}
                 })
-            user_content.append({"type": "text", "text": "\n### END OF CONTEXT ###\n"})
 
-        # 2. Add primary task content
-        if png_bytes:
-            # Convert bytes to base64
-            base64_image = base64.b64encode(png_bytes).decode('utf-8')
-            user_content.append({"type": "text", "text": "### PRIMARY TASK VIEW ###"})
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{base64_image}"}
-            })
-            
-        # 3. Final request text
-        text_prompt = "[USER REQUEST]: " if additional_text else "Analyze the Primary Task View using the provided context."
+        # 3. VERBAL REQUEST
+        text_prompt = "[USER REQUEST]: " if additional_text else "Solve the Primary Task View using the provided documentation."
         if additional_text:
             text_prompt += additional_text
-        
         user_content.append({"type": "text", "text": text_prompt})
+
+        # Web-Parity 3.7: Memorization Directive
+        # Forces the model to transcribe/reference visual data into text for persistent memory.
+        if png_bytes or context_images:
+            user_content.append({
+                "type": "text", 
+                "text": "\n[MEMORIZATION DIRECTIVE]: This turn contains vital visual context. "
+                        "In your response, ensure you transcribe or reference key details (endpoints, code, logic, etc) "
+                        "from the images into your reply. This ensures the information stays in our textual memory "
+                        "after the pixels are offloaded."
+            })
 
         if not user_content:
              yield SidecarEvent(SidecarEventType.ERROR, content="No context provided.")
@@ -57,21 +75,10 @@ class GroqEngine(BaseEngine):
 
         self.messages.append({"role": "user", "content": user_content})
         
-        if settings.SAVE_DEBUG_SNAPSHOTS:
-            from core.utils.logger import logger
-            logger.debug(f"Sending {len(self.messages)} messages to Groq. (Last content size: {len(str(user_content))})")
-
-        # Context Bloat Protection: Blind previous images to save tokens
-        scrubbed_messages = []
-        for i, msg in enumerate(self.messages):
-            if i < len(self.messages) - 1 and isinstance(msg.get("content"), list):
-                # Remove image from older turns, leave only text
-                text_only = [p for p in msg["content"] if p.get("type") == "text"]
-                scrubbed_messages.append({"role": msg["role"], "content": text_only})
-            else:
-                scrubbed_messages.append(msg)
-
-        yield from self._execute_chat_completion(scrubbed_messages)
+        yield from self._execute_chat_completion()
+        
+        # Post-Turn Execution: Visual Offloading (Web-Parity 3.7)
+        self.manage_context()
 
     def _execute_chat_completion(self, messages_to_send=None) -> Generator[SidecarEvent, None, None]:
         if messages_to_send is None:
@@ -124,24 +131,17 @@ class GroqEngine(BaseEngine):
         # Groq engine doesn't currently toggle but we could switch between model IDs
         return False
 
-    def truncate_history(self, max_turns: int = 10):
+    def manage_context(self):
         """
-        Rank-Weighted Truncation (Sidecar 3.0):
-        Preserves the system instruction and the latest turns while 
-        purging the conversation middle to prevent context window pressure.
+        Visual Offloading (Web-Parity 3.6):
+        Strips large visual payloads (base64 images) from previous turns,
+        preserving original text turns for infinite context.
         """
-        if len(self.messages) <= max_turns:
-            return
-
-        # Rank 1: System Instruction (Absolute Priority)
-        system_msg = [self.messages[0]]
-        
-        # Rank 2: Recent Context
-        # We take max_turns - 1 (for system)
-        recent_count = max_turns - 1
-        recents = self.messages[-recent_count:] if recent_count > 0 else []
-        
-        # Combine
-        self.messages = system_msg + recents
-        from core.utils.logger import logger
-        logger.info(f"Groq Context Truncated: {len(self.messages)} turns remaining.")
+        for msg in self.messages:
+            if isinstance(msg.get("content"), list):
+                # Replace image parts with a lightweight placeholder
+                # We skip the very last message as it's the active turn being sent
+                msg["content"] = [
+                    p if p.get("type") != "image_url" else {"type": "text", "text": "[OFFLOADED IMAGE: Processed]"}
+                    for p in msg["content"]
+                ]

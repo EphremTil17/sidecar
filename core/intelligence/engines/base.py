@@ -34,6 +34,6 @@ class BaseEngine(ABC):
         pass
 
     @abstractmethod
-    def truncate_history(self, max_turns: int):
-        """Truncates history based on rank-weighted importance."""
+    def manage_context(self):
+        """Optimizes session history (e.g., scrubbing pixels, caching) without losing textual context."""
         pass

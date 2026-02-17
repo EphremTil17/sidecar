@@ -77,32 +77,21 @@ class FireworksEngine(BaseEngine):
             text_prompt += additional_text
         user_content.append({"type": "text", "text": text_prompt})
 
+        # Web-Parity 3.7: Memorization Directive
+        if png_bytes or context_images:
+            user_content.append({
+                "type": "text",
+                "text": "\n[MEMORIZATION DIRECTIVE]: This turn contains vital visual context. "
+                        "In your response, ensure you transcribe or reference key details "
+                        "from the images into your reply for persistent memory."
+            })
+
         self.messages.append({"role": "user", "content": user_content})
 
-        # Context Bloat Protection: 
-        # 1. Keep the system prompt (at index 0) for caching.
-        # 2. Limit history to the last 10 turns to save tokens/latency.
-        # 3. Scrub old images to keep payloads small.
+        yield from self._execute_request(self.messages)
         
-        system_msg = self.messages[0]
-        history = self.messages[1:]
-        
-        # Limit history length
-        MAX_HISTORY = 20
-        if len(history) > MAX_HISTORY:
-            history = history[-MAX_HISTORY:]
-            
-        cleaned_messages = [system_msg]
-        for i, msg in enumerate(history):
-            # Check if this isn't the very last message in the cleaned list 
-            # (which would be our current turn with the image)
-            if i < len(history) - 1 and isinstance(msg.get("content"), list):
-                text_only = [p for p in msg["content"] if p.get("type") == "text"]
-                cleaned_messages.append({"role": msg["role"], "content": text_only})
-            else:
-                cleaned_messages.append(msg)
-
-        yield from self._execute_request(cleaned_messages)
+        # Post-Turn Execution: Visual Offloading (Web-Parity 3.7)
+        self.manage_context()
 
     def _execute_request(self, messages: list) -> Generator[SidecarEvent, None, None]:
         """Executes the POST request to Fireworks and streams chunks."""
@@ -167,23 +156,19 @@ class FireworksEngine(BaseEngine):
         yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=f"Fireworks engine re-tasked to {skill_data['identity'][:30]}...")
         yield SidecarEvent(SidecarEventType.FINISH)
 
-    def truncate_history(self, max_turns: int = 10):
+    def manage_context(self):
         """
-        Rank-Weighted Truncation (Sidecar 3.0):
-        Preserves the system prompt for caching and the latest turns for context.
+        Visual Offloading (Web-Parity 3.6):
+        Strips large visual payloads (base64 images) from previous turns,
+        preserving original text turns for infinite context.
         """
-        if len(self.messages) <= max_turns:
-            return
-
-        # Rank 1: System Message (Anchor for cache)
-        system_msg = [self.messages[0]]
-        
-        # Rank 2: Recent turns
-        recent_count = max_turns - 1
-        recents = self.messages[-recent_count:] if recent_count > 0 else []
-        
-        self.messages = system_msg + recents
-        logger.info(f"Fireworks Context Truncated: {len(self.messages)} turns.")
+        for msg in self.messages:
+            if isinstance(msg.get("content"), list):
+                # Replace image parts with a lightweight placeholder
+                msg["content"] = [
+                    p if p.get("type") != "image_url" else {"type": "text", "text": "[OFFLOADED IMAGE: Processed]"}
+                    for p in msg["content"]
+                ]
 
     def get_model_name(self):
         return f"FIREWORKS ({self.model_id.split('/')[-1]})"
