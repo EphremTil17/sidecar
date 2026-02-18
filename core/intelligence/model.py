@@ -108,17 +108,6 @@ class SidecarBrain:
         # This sends documentation/images ONCE, then clears local storage.
         context = self.vision_vault.flush()
         
-        # We detect if this is a follow-up or a new problem to adjust the prompt
-        is_follow_up = False
-        if hasattr(self.active_engine, 'chat_session') and self.active_engine.chat_session:
-             if len(self.active_engine.chat_session._curated_history) > 1:
-                 is_follow_up = True
-        elif hasattr(self.active_engine, 'messages') and len(self.active_engine.messages) > 1:
-             is_follow_up = True
-
-        if is_follow_up and not additional_text:
-            additional_text = "Following up on the previous context—what changed in this new view? Identify any new errors or progress."
-
         return self.active_engine.stream_analysis(png_bytes, additional_text, context_images=context)
 
     def add_to_vault(self, image_bytes: bytes):
@@ -132,20 +121,20 @@ class SidecarBrain:
             yield SidecarEvent(SidecarEventType.ERROR, content="No transcription data received.")
             return
 
-        # Web-Parity 3.0: Engine now manages its own memory statefully.
-
-        # Prepare follow-up message
-        self.active_engine.add_user_message(f"[CONVERSATION TURN]: {transcription}")
+        # Web-Parity 2.0: Check if we have 'Ingested' context (Vector I) waiting to be sent.
+        # If the vault has images, this MUST be a multimodal turn even if the trigger was verbal.
+        context = self.vision_vault.flush()
         
-        # Web-Parity Optimization: Verbal turns are PURE TEXT. 
-        # We do NOT re-upload previous images; the engine uses its internal history.
-        if hasattr(self.active_engine, '_execute_chat_completion'):
+        if context:
+            # If we have vaulted context, we MUST use stream_analysis to transmit images
+            yield from self.active_engine.stream_analysis(None, transcription, context_images=context)
+        elif hasattr(self.active_engine, '_execute_chat_completion'):
+             # Pure text follow-up using engine's internal history
+             self.active_engine.add_user_message(f"[CONVERSATION TURN]: {transcription}")
              yield from self.active_engine._execute_chat_completion()
         else:
-            # Web-Parity 2.0: Allow verbal Turn (T) to flush ingestion (I).
-            # This lets you ingest multiple docs and then just press Talk to send them.
-            context = self.vision_vault.flush()
-            yield from self.active_engine.stream_analysis(None, transcription, context_images=context)
+            # Fallback for engines without specialized text handlers
+            yield from self.active_engine.stream_analysis(None, transcription, context_images=None)
 
     def pivot_skill(self, skill_data: dict, assembled_prompt: str):
         """Pivots the skill for the active engine."""

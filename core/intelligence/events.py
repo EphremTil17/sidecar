@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 
 class SidecarEventType(Enum):
     TEXT_CHUNK = auto()
+    THOUGHT_CHUNK = auto()
     STATUS = auto()
     ERROR = auto()
     FINISH = auto()

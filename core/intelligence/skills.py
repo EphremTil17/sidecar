@@ -55,28 +55,33 @@ class SkillManager:
 
 
     def assemble_prompt(self, skill_data):
-        """Combines the 3-layer data into a unified, high-performance system prompt with Dialogue Protocol."""
+        """Assembles the system prompt purely from skill data layers with Standardized Patterns."""
         
-        protocol = """
-## VERBAL INTERACTION PROTOCOL (Vector T)
-When you receive a [CONVERSATION TURN] or transcription context, respond as a high-level human collaborator.
-- Tone: Technical, direct, and conversational (like a senior peer pair-programming).
-- Format: ALWAYS use standard Markdown. Use # for headers and ``` for code blocks.
-- Script Style: Write your response as if perusing a script for a fluid technical dialogue.
-- Constraint: Avoid academic verbosity or generic AI filler. Focus purely on actionable insight.
-"""
+        # Standard Operating Patterns: Defines the RELATIONSHIP between vectors, not the persona.
+        patterns = """
+## CORE INTERACTION PATTERNS
+- [CURRENT VIEW]: Represents the primary task or current focus. 
+- [CONTEXT RECORD]: Represents supporting documentation or historical state (The Vault).
+- [USER REQUEST]: Represents the active intent and take priority.
 
-        prompt = f"""# CORE IDENTITY
+## EXECUTION LOGIC
+1. Sequential Priority: User requests (Transcription/Text) define the immediate goal and take priority.
+2. Contextual Anchoring: All execution must be grounded in the provided [CURRENT VIEW] and [CONTEXT RECORD]. 
+3. Logic Continuity: If a transcription follows a visual capture or ingestion, treat it as a sequential instruction acting upon that specific data.
+4. Auto-Synthesis Requirement: If [CONTEXT RECORD] is provided alongside a [CURRENT VIEW], you must automatically treat this as a signal to re-evaluate the task in the [CURRENT VIEW] using the data/logic found in the [CONTEXT RECORD], regardless of whether a user request is present.
+"""
+        
+        prompt = f"""# IDENTITY
 {skill_data['identity']}
 
-# OPERATIONAL INSTRUCTIONS
-{skill_data['instructions']}
+# STANDARD OPERATING PATTERNS
+{patterns}
 
-# GLOBAL CONVERSATION PROTOCOL
-{protocol}
-
-# SESSION CONTEXT
+# SESSION CONTEXT (SKILL DATA)
 {skill_data['context']}
+
+# OPERATIONAL INSTRUCTIONS (SKILL DATA)
+{skill_data['instructions']}
 """
         return prompt
 

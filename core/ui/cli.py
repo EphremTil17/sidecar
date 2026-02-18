@@ -52,17 +52,19 @@ class CLI:
         return f"{p_status} {Fore.LIGHTBLACK_EX}|{Style.RESET_ALL} {t_status}"
 
     @staticmethod
-    def print_ready():
+    def print_ready(pre_status: str = None):
         """Prints a premium, condensed status bar for the cockpit."""
         divider = f"{Fore.LIGHTBLACK_EX}{'—' * 65}{Style.RESET_ALL}"
         status_text = f"{Fore.YELLOW}{Style.BRIGHT}● READY{Style.RESET_ALL}"
         context_line = CLI._get_context_status()
-        
-        # Check if transcription context is active (non-empty transcription.txt usually handled in sidecar.py)
-        # For the status bar, we show the hotkey hints clearly
         hints = f"{Fore.LIGHTBLACK_EX}Capture: ^!+P  Talk: ^!+T{Style.RESET_ALL}"
         
-        print(f"\n{divider}")
+        if pre_status:
+            print(f"\n  {pre_status}")
+        else:
+            print()
+            
+        print(divider)
         print(f"  {status_text}  {Fore.LIGHTBLACK_EX}::{Style.RESET_ALL}  {context_line}  {Fore.LIGHTBLACK_EX}::{Style.RESET_ALL}  {hints}")
         print(f"{divider}\n")
 
