@@ -1,5 +1,7 @@
 import logging
-import sys, os
+import os
+import sys
+
 from colorama import Fore, Style, init
 
 # Initialize colorama
@@ -9,27 +11,31 @@ init(autoreset=True)
 SUCCESS_LEVEL_NUM = 25
 logging.addLevelName(SUCCESS_LEVEL_NUM, "SUCCESS")
 
+
 def success_ext(self, message, *args, **kws):
     if self.isEnabledFor(SUCCESS_LEVEL_NUM):
         self._log(SUCCESS_LEVEL_NUM, message, args, **kws)
 
+
 logging.Logger.success = success_ext
+
 
 class SidecarLogger:
     """
     Robust logging utility for SidecarAI.
     Ensures clear, color-coded output with dynamic level support.
     """
+
     def __init__(self, name="SidecarAI"):
         self.logger = logging.getLogger(name)
         self.update_level()
-        
+
         if not self.logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
             # Match the highly professional: TIME | LEVEL | MESSAGE
             formatter = logging.Formatter(
-                f'{Fore.LIGHTBLACK_EX}%(asctime)s | {Style.RESET_ALL}%(levelname)-8s {Fore.LIGHTBLACK_EX}|{Style.RESET_ALL} %(message)s', 
-                datefmt='%H:%M:%S'
+                f"{Fore.LIGHTBLACK_EX}%(asctime)s | {Style.RESET_ALL}%(levelname)-8s {Fore.LIGHTBLACK_EX}|{Style.RESET_ALL} %(message)s",
+                datefmt="%H:%M:%S",
             )
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
@@ -55,6 +61,7 @@ class SidecarLogger:
 
     def debug(self, msg):
         self.logger.debug(f"{Fore.LIGHTBLACK_EX}{msg}{Style.RESET_ALL}")
+
 
 # Singleton instance
 logger = SidecarLogger()

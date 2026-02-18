@@ -1,8 +1,12 @@
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# --- Local Directory Discovery ---
+# We force-load .env from the execution root to ensure consistency.
+env_path = Path(".env")
+load_dotenv(dotenv_path=env_path)
 
 # --- Hotkey Mapping Constants ---
 MOD_ALT = 0x0001
@@ -12,25 +16,41 @@ MOD_WIN = 0x0008
 
 VK_MAP = {
     # Arrows
-    "UP": 0x26, "DOWN": 0x28, "LEFT": 0x25, "RIGHT": 0x27,
+    "UP": 0x26,
+    "DOWN": 0x28,
+    "LEFT": 0x25,
+    "RIGHT": 0x27,
     # Navigation
-    "PGUP": 0x21, "PGDN": 0x22, "PRIOR": 0x21, "NEXT": 0x22,
-    "HOME": 0x24, "END": 0x23, "INSERT": 0x2D, "DELETE": 0x2E,
+    "PGUP": 0x21,
+    "PGDN": 0x22,
+    "PRIOR": 0x21,
+    "NEXT": 0x22,
+    "HOME": 0x24,
+    "END": 0x23,
+    "INSERT": 0x2D,
+    "DELETE": 0x2E,
     # Symbols
-    "PLUS": 0xBB, "MINUS": 0xBD, "EQUALS": 0xBB,
-    "BACKSPACE": 0x08, "TAB": 0x09, "ENTER": 0x0D, "ESC": 0x1B, "SPACE": 0x20,
+    "PLUS": 0xBB,
+    "MINUS": 0xBD,
+    "EQUALS": 0xBB,
+    "BACKSPACE": 0x08,
+    "TAB": 0x09,
+    "ENTER": 0x0D,
+    "ESC": 0x1B,
+    "SPACE": 0x20,
 }
+
 
 def parse_hotkey(env_var: str, default_str: str):
     """
     Parses a hotkey string like 'Ctrl+Alt+Shift+P' into (vk_code, modifiers).
     """
     raw = os.getenv(env_var, default_str)
-    parts = raw.upper().split('+')
-    
+    parts = raw.upper().split("+")
+
     modifiers = 0
     vk_code = 0
-    
+
     for part in parts:
         part = part.strip()
         if part == "CTRL" or part == "CONTROL":
@@ -47,22 +67,32 @@ def parse_hotkey(env_var: str, default_str: str):
             vk_code = ord(part)
         elif part.startswith("0X"):
             vk_code = int(part, 16)
-            
+
     return vk_code, modifiers
 
-# --- API Configuration ---
+
+# --- Intelligence Configuration ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-SIDECAR_MONITOR_INDEX = int(os.getenv("SIDECAR_MONITOR_INDEX", 1))
-PROJECT_ROOT = os.getenv("PROJECT_ROOT", os.getcwd())
-TRANSCRIPTION_PATH = os.path.abspath(os.path.join(PROJECT_ROOT, os.getenv("TRANSCRIPTION_PATH", "transcription.txt")))
+SIDECAR_MONITOR_INDEX = int(os.getenv("SIDECAR_MONITOR_INDEX", "1"))
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", str(Path.cwd())))
+TRANSCRIPTION_PATH = (PROJECT_ROOT / os.getenv("TRANSCRIPTION_PATH", "transcription.txt")).resolve()
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+SIDECAR_ENGINE = os.getenv("SIDECAR_ENGINE", "gemini").lower()
+MODEL_FLASH = os.getenv("MODEL_FLASH", "models/gemini-2.0-flash-exp")
+MODEL_PRO = os.getenv("MODEL_PRO", "models/gemini-2.0-pro-exp-02-05")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "meta-llama/llama-3.1-405b-instruct")
+FIREWORKS_MODEL = os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/llama-v3p1-405b-instruct")
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
+AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", "48000"))
 
 # --- Capture Configuration ---
 CROP_MARGINS = {
     "top": int(os.getenv("SIDECAR_CROP_TOP", 120)),
     "bottom": int(os.getenv("SIDECAR_CROP_BOTTOM", 40)),
     "left": int(os.getenv("SIDECAR_CROP_LEFT", 0)),
-    "right": int(os.getenv("SIDECAR_CROP_RIGHT", 0))
+    "right": int(os.getenv("SIDECAR_CROP_RIGHT", 0)),
 }
 
 # --- Hotkey Configuration ---
@@ -84,32 +114,26 @@ HK_FONT_DOWN = parse_hotkey("HOTKEY_FONT_DOWN", "Ctrl+Alt+Minus")
 HK_SCROLL_UP = parse_hotkey("HOTKEY_SCROLL_UP", "Ctrl+Alt+PgUp")
 HK_SCROLL_DOWN = parse_hotkey("HOTKEY_SCROLL_DOWN", "Ctrl+Alt+PgDn")
 
+# --- UI Configuration (Ghost Mode) ---
+GHOST_BG_ALPHA_LOW = float(os.getenv("GHOST_BG_ALPHA_LOW", "0.39"))
+GHOST_BG_ALPHA_HIGH = float(os.getenv("GHOST_BG_ALPHA_HIGH", "0.9"))
+GHOST_TEXT_ALPHA_LOW = float(os.getenv("GHOST_TEXT_ALPHA_LOW", "0.78"))
+GHOST_TEXT_ALPHA_HIGH = float(os.getenv("GHOST_TEXT_ALPHA_HIGH", "1.0"))
 
-# --- Intelligence Configuration ---
-SIDECAR_ENGINE = os.getenv("SIDECAR_ENGINE", "gemini").lower()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-MODEL_FLASH = os.getenv("MODEL_FLASH", "models/gemini-3-flash-preview")
-MODEL_PRO = os.getenv("MODEL_PRO", "models/gemini-3-pro-preview")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
-FIREWORKS_MODEL = os.getenv("FIREWORKS_MODEL", "accounts/fireworks/models/kimi-k2p5")
-GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
-THINKING_LEVEL = os.getenv("THINKING_LEVEL", "low")
-AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 16000))
-
-# --- Ghost Configuration ---
-GHOST_MODE_AUTO = os.getenv("GHOST_MODE_AUTO", "False").lower() == "true"
-GHOST_BG_ALPHA_LOW = float(os.getenv("GHOST_BG_ALPHA_LOW", 0.39))
-GHOST_BG_ALPHA_HIGH = float(os.getenv("GHOST_BG_ALPHA_HIGH", 0.90))
-GHOST_TEXT_ALPHA_LOW = float(os.getenv("GHOST_TEXT_ALPHA_LOW", 0.78))
-GHOST_TEXT_ALPHA_HIGH = float(os.getenv("GHOST_TEXT_ALPHA_HIGH", 1.0))
-GHOST_FONT_SIZE = int(os.getenv("GHOST_FONT_SIZE", 10))
+GHOST_FONT_SIZE = int(os.getenv("GHOST_FONT_SIZE", "11"))
 GHOST_FONT_FAMILY = os.getenv("GHOST_FONT_FAMILY", "Consolas")
-GHOST_WIDTH = int(os.getenv("GHOST_WIDTH", 800))
-GHOST_HEIGHT = int(os.getenv("GHOST_HEIGHT", 600))
+GHOST_WIDTH = int(os.getenv("GHOST_WIDTH", "800"))
+GHOST_HEIGHT = int(os.getenv("GHOST_HEIGHT", "400"))
 
-# --- Modality Configuration ---
-VERBOSE_REASONING = os.getenv("SIDECAR_VERBOSE", "False").lower() == "true"
+# --- Skill Configuration ---
+ACTIVE_SKILL = os.getenv("SIDECAR_SKILL", "coding_expert")
+
+# --- Performance & Logic ---
+CONTEXT_WINDOW_LIMIT = int(os.getenv("CONTEXT_WINDOW_LIMIT", "10"))
+OFFLOAD_AFTER_TURNS = int(os.getenv("OFFLOAD_AFTER_TURNS", "3"))
+THINKING_LEVEL = os.getenv("THINKING_LEVEL", "medium")
+VERBOSE_REASONING = os.getenv("VERBOSE_REASONING", "False").lower() == "true"
 
 # --- Debug Configuration ---
 SAVE_DEBUG_SNAPSHOTS = os.getenv("SIDECAR_DEBUG", "False").lower() == "true"
-DEBUG_DIR = os.path.join(PROJECT_ROOT, "debug_snapshots")
+DEBUG_DIR = PROJECT_ROOT / "debug_snapshots"

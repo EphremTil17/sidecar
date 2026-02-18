@@ -1,6 +1,6 @@
 import ctypes
-from ctypes import wintypes
 import time
+from ctypes import wintypes
 
 # Constants
 MOD_ALT = 0x0001
@@ -8,6 +8,7 @@ MOD_CONTROL = 0x0002
 MOD_SHIFT = 0x0004
 WM_QUIT = 0x0012
 WM_HOTKEY = 0x0312
+
 
 class HotkeyManager:
     def __init__(self):
@@ -21,8 +22,9 @@ class HotkeyManager:
         """
         if modifiers is None:
             from core.config import settings
+
             modifiers = settings.MODIFIERS
-            
+
         success = self.user32.RegisterHotKey(None, id, modifiers, vk_code)
         if success:
             self.hotkeys[id] = callback
@@ -35,7 +37,7 @@ class HotkeyManager:
 
     def listen(self, exit_callback=None):
         """
-        Starts the message loop. 
+        Starts the message loop.
         Blocking call until WM_QUIT is received or interrupted.
         """
         msg = wintypes.MSG()
@@ -44,12 +46,12 @@ class HotkeyManager:
                 if self.user32.PeekMessageA(ctypes.byref(msg), None, 0, 0, 1):
                     if msg.message == WM_QUIT:
                         break
-                    
+
                     if msg.message == WM_HOTKEY:
                         id = msg.wParam
                         if id in self.hotkeys:
                             self.hotkeys[id]()
-                    
+
                     self.user32.TranslateMessage(ctypes.byref(msg))
                     self.user32.DispatchMessageA(ctypes.byref(msg))
                 else:

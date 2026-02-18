@@ -1,10 +1,13 @@
+from collections.abc import Generator
+
 from google import genai
 from google.genai import types
-from typing import Generator
+
 from core.config import settings
 from core.intelligence.engines.base import BaseEngine
 from core.intelligence.events import SidecarEvent, SidecarEventType
 from core.utils.logger import logger
+
 
 class GeminiEngine(BaseEngine):
     """
@@ -12,6 +15,7 @@ class GeminiEngine(BaseEngine):
     Utilizes the new GenAI SDK for low-latency reasoning and vision.
     Synchronized with latest SDK patterns for Gemini 3 models.
     """
+
     def __init__(self, api_key):
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
@@ -25,86 +29,124 @@ class GeminiEngine(BaseEngine):
         """Initializes the chat session with the given system prompt."""
         self.current_system_prompt = system_prompt
         model_id = self.model_pro if self.use_pro_model else self.model_flash
-        
+
         config = types.GenerateContentConfig(
             system_instruction=self.current_system_prompt,
             temperature=1.0,
             thinking_config=types.ThinkingConfig(
-                include_thoughts=True,
-                thinking_level=settings.THINKING_LEVEL
-            )
+                include_thoughts=True, thinking_level=settings.THINKING_LEVEL
+            ),
         )
         self.chat_session = self.client.chats.create(model=model_id, config=config)
         logger.debug(f"Gemini session initialized with model: {model_id}")
 
-    def stream_analysis(self, png_bytes: bytes, additional_text: str = "", context_images: list = None) -> Generator[SidecarEvent, None, None]:
-        """
-        Multimodal analysis stream (Vector P).
-        Handles images and text while managing history.
-        """
+    def _assemble_parts(
+        self, png_bytes: bytes, additional_text: str, context_images: list | None
+    ) -> list:
+        """Helper to assemble the multimodal parts for Gemini."""
+        content_parts = []
+
+        # 1. PRIMARY TASK VIEW (Highest Priority)
+        if png_bytes:
+            content_parts.append("[CURRENT VIEW]:")
+            image_part = types.Part.from_bytes(data=png_bytes, mime_type="image/png")
+            content_parts.append(image_part)
+
+        # 2. SUPPORTING CONTEXT (Supplementary)
+        if context_images:
+            content_parts.append("[CONTEXT RECORD]:")
+            for item in context_images:
+                img_part = types.Part.from_bytes(data=item.image_bytes, mime_type="image/png")
+                content_parts.append(img_part)
+
+        content_parts.append(
+            f"\n[USER REQUEST]: {additional_text}"
+            if additional_text
+            else "\n[SIGNAL]: Synthesize all visual context and execute based on active Skill."
+        )
+        return content_parts
+
+    def stream_analysis(
+        self,
+        png_bytes: bytes,
+        additional_text: str = "",
+        context_images: list | None = None,
+    ) -> Generator[SidecarEvent, None, None]:
+        if not self.api_key:
+            yield SidecarEvent(SidecarEventType.ERROR, content="Google API Key is missing.")
+            return
+
         if not self.chat_session:
             self.init_session(self.current_system_prompt)
 
-        yield SidecarEvent(SidecarEventType.STATUS, content=f"Handshake with {self.get_model_name()}...")
+        yield SidecarEvent(
+            SidecarEventType.STATUS,
+            content=f"HANDSHAKE_START: {self.get_model_name()}",
+        )
 
         try:
-            content_parts = []
-            
-            # 1. PRIMARY TASK VIEW (Highest Priority)
-            if png_bytes:
-                content_parts.append("[CURRENT VIEW]:")
-                image_part = types.Part.from_bytes(data=png_bytes, mime_type="image/png")
-                content_parts.append(image_part)
-            
-            # 2. SUPPORTING CONTEXT (Supplementary)
-            if context_images:
-                content_parts.append("[CONTEXT RECORD]:")
-                for item in context_images:
-                    img_part = types.Part.from_bytes(data=item.image_bytes, mime_type="image/png")
-                    content_parts.append(img_part)
-            
-            content_parts.append(f"\n[USER REQUEST]: {additional_text}" if additional_text else "\n[SIGNAL]: Synthesize all visual context and execute based on active Skill.")
-            
-            if not content_parts:
-                 yield SidecarEvent(SidecarEventType.ERROR, content="No visual or verbal context provided.")
-                 return
-            
+            content_parts = self._assemble_parts(png_bytes, additional_text, context_images)
+
+            # A turn is valid if it has images OR explicit user text.
+            # Only error if it's a blind signal turn without any visual data.
+            has_images = bool(png_bytes or context_images)
+            if not has_images and not additional_text:
+                yield SidecarEvent(
+                    SidecarEventType.ERROR,
+                    content="No visual or verbal context provided.",
+                )
+                return
+
             stream = self.chat_session.send_message_stream(message=content_parts)
             for chunk in stream:
-                if chunk.candidates[0].content and chunk.candidates[0].content.parts:
-                    for part in chunk.candidates[0].content.parts:
-                        if part.thought:
-                            if settings.VERBOSE_REASONING:
-                                # Gemini 3.0 SDK: Thoughts are in part.thought, not part.text
-                                yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=part.thought, metadata={"is_thought": True})
-                            else:
-                                # Standard: Signal internal 'Thinking' status
-                                yield SidecarEvent(SidecarEventType.THOUGHT_CHUNK, content=part.thought)
-                        elif part.text:
-                            yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=part.text)
-                    
+                yield from self._process_chunk(chunk)
+
             yield SidecarEvent(SidecarEventType.FINISH)
-            
+
             # Post-Turn Execution: Visual Offloading (Web-Parity 3.0)
             offload_msg = self.manage_context()
             if offload_msg:
-                yield SidecarEvent(SidecarEventType.STATUS, content=offload_msg)
-            
+                logger.debug(offload_msg)
+
         except Exception as e:
             yield SidecarEvent(SidecarEventType.ERROR, content=str(e))
 
-    def stream_pivot(self, skill_data: dict, assembled_prompt: str) -> Generator[SidecarEvent, None, None]:
+    def _process_chunk(self, chunk) -> Generator[SidecarEvent, None, None]:
+        """Internal helper to process a single Gemini stream chunk."""
+        if not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
+            return
+
+        for part in chunk.candidates[0].content.parts:
+            if part.thought:
+                yield from self._handle_thought(part.thought)
+            elif part.text:
+                yield SidecarEvent(SidecarEventType.TEXT_CHUNK, content=part.text)
+
+    def _handle_thought(self, thought: str) -> Generator[SidecarEvent, None, None]:
+        """Handles internal 'Thinking' reasoning blocks."""
+        if settings.VERBOSE_REASONING:
+            yield SidecarEvent(
+                SidecarEventType.TEXT_CHUNK,
+                content=thought,
+                metadata={"is_thought": True},
+            )
+        else:
+            yield SidecarEvent(SidecarEventType.THOUGHT_CHUNK, content=thought)
+
+    def stream_pivot(
+        self, skill_data: dict, assembled_prompt: str
+    ) -> Generator[SidecarEvent, None, None]:
         """Pivots the skill for the session."""
         self.current_system_prompt = assembled_prompt
-        override_msg = f"""[SYSTEM OVERRIDE]: Re-tasking sequence initiated. 
+        override_msg = f"""[SYSTEM OVERRIDE]: Re-tasking sequence initiated.
 # NEW IDENTITY
-{skill_data['identity']}
+{skill_data["identity"]}
 # NEW OPERATIONAL INSTRUCTIONS
-{skill_data['instructions']}
+{skill_data["instructions"]}
 # NEW SESSION DATA (CONTEXT)
-{skill_data['context']}
+{skill_data["context"]}
 Please acknowledge you have absorbed these new instructions."""
-        
+
         try:
             # We send the override message WITHOUT re-initing if possible,
             # but usually, we MUST re-init to apply the new system prompt in config for Gemini 3.0.
@@ -136,21 +178,23 @@ Please acknowledge you have absorbed these new instructions."""
     def manage_context(self):
         """
         Visual Offloading (Web-Parity 3.0):
-        Strips heavy binary data (images) from history while keeping the 
+        Strips heavy binary data (images) from history while keeping the
         chat session lean and persistent turns textual.
         """
-        if not self.chat_session or not hasattr(self.chat_session, '_curated_history'):
+        if not self.chat_session or not hasattr(self.chat_session, "_curated_history"):
             return None
 
         history = self.chat_session._curated_history
         scrubbed_count = 0
-        
+
         for content in history:
-            if hasattr(content, 'parts'):
+            if hasattr(content, "parts"):
                 new_parts = []
                 for p in content.parts:
-                    if hasattr(p, 'inline_data') and p.inline_data:
-                        new_parts.append(types.Part.from_text(text="[OFFLOADED IMAGE: Processed Context]"))
+                    if hasattr(p, "inline_data") and p.inline_data:
+                        new_parts.append(
+                            types.Part.from_text(text="[OFFLOADED IMAGE: Processed Context]")
+                        )
                         scrubbed_count += 1
                     else:
                         new_parts.append(p)

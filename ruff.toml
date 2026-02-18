@@ -1,0 +1,32 @@
+# Ruff configuration for SidecarAI - Structuralist Standard
+target-version = "py311"
+line-length = 100
+
+[lint]
+# Enable a wide range of rules focused on clarity and safety.
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+    "I",    # isort (import sorting)
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear (common bugs)
+    "SIM",  # flake8-simplify
+    "C90",  # McCabe complexity
+    "RUF",  # Ruff-specific rules
+    "PTH",  # flake8-use-pathlib
+]
+
+ignore = [
+    "E501", # Line too long (already handled by formatter/linter)
+]
+
+[lint.mccabe]
+# Strict complexity limit for 'Structuralist' audit-readiness.
+# Functions with complexity > 10 must be refactored.
+max-complexity = 10
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

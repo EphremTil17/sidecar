@@ -1,22 +1,24 @@
 import sounddevice as sd
 from colorama import Fore
 
+
 def get_wasapi_input_devices():
     """Returns a list of tuples (id, name) for all WASAPI input devices."""
     devices = sd.query_devices()
     host_apis = sd.query_hostapis()
-    
+
     wasapi_api_idx = next((i for i, api in enumerate(host_apis) if "WASAPI" in api["name"]), None)
-    
+
     if wasapi_api_idx is None:
         return []
 
     input_devices = []
     for i, dev in enumerate(devices):
-        if dev['max_input_channels'] > 0 and dev['hostapi'] == wasapi_api_idx:
-            input_devices.append((i, dev['name']))
-    
+        if dev["max_input_channels"] > 0 and dev["hostapi"] == wasapi_api_idx:
+            input_devices.append((i, dev["name"]))
+
     return input_devices
+
 
 def select_audio_device_cli():
     """Interactive CLI for selecting a WASAPI input device."""
@@ -33,7 +35,7 @@ def select_audio_device_cli():
 
     while True:
         try:
-            choice = input(f"\n{Fore.YELLOW}Select device index [0-{len(input_devices)-1}]: ")
+            choice = input(f"\n{Fore.YELLOW}Select device index [0-{len(input_devices) - 1}]: ")
             selected_idx = int(choice)
             if 0 <= selected_idx < len(input_devices):
                 dev_id, dev_name = input_devices[selected_idx]

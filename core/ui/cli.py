@@ -1,13 +1,16 @@
-import time
 import sys
-if sys.platform == 'win32':
+import time
+
+if sys.platform == "win32":
     import msvcrt
-from core.utils.editor import NotepadDriver
-from core.ui.logo import logo
 from colorama import Fore, Style, init
+
+from core.ui.logo import logo
+from core.utils.editor import NotepadDriver
 
 # Initialize colorama for Windows
 init(autoreset=True)
+
 
 class CLI:
     Fore = Fore
@@ -19,14 +22,22 @@ class CLI:
         Displays a countdown and waits for a keypress.
         Returns True if a key was pressed (indicating a request for setup).
         """
-        print(f"\n{Fore.YELLOW}Launching last session... {Fore.WHITE}(Press any key for Setup in {timeout}s) ", end="", flush=True)
-        
+        print(
+            f"\n{Fore.YELLOW}Launching last session... {Fore.WHITE}(Press any key for Setup in {timeout}s) ",
+            end="",
+            flush=True,
+        )
+
         start_time = time.time()
         while time.time() - start_time < timeout:
             remaining = int(timeout - (time.time() - start_time))
-            print(f"\r{Fore.YELLOW}Launching last session... {Fore.WHITE}(Press any key for Setup in {remaining}s) ", end="", flush=True)
-            
-            if sys.platform == 'win32':
+            print(
+                f"\r{Fore.YELLOW}Launching last session... {Fore.WHITE}(Press any key for Setup in {remaining}s) ",
+                end="",
+                flush=True,
+            )
+
+            if sys.platform == "win32":
                 if msvcrt.kbhit():
                     # Clear the key from buffer
                     msvcrt.getch()
@@ -35,14 +46,18 @@ class CLI:
             else:
                 # Fallback for non-windows (though this app is focused on Windows)
                 import select
+
                 if select.select([sys.stdin], [], [], 0.1)[0]:
                     sys.stdin.read(1)
                     return True
-            
+
             time.sleep(0.1)
-        
-        print(f"\r{Fore.GREEN}Launching last session... {Fore.WHITE}(Bypassing Setup)              \n")
+
+        print(
+            f"\r{Fore.GREEN}Launching last session... {Fore.WHITE}(Bypassing Setup)              \n"
+        )
         return False
+
     @staticmethod
     def _get_context_status():
         """Builds a condensed status for context vectors."""
@@ -52,31 +67,31 @@ class CLI:
         return f"{p_status} {Fore.LIGHTBLACK_EX}|{Style.RESET_ALL} {t_status}"
 
     @staticmethod
-    def print_ready(pre_status: str = None):
+    def print_ready(pre_status: str | None = None):
         """Prints a premium, condensed status bar for the cockpit."""
         divider = f"{Fore.LIGHTBLACK_EX}{'—' * 65}{Style.RESET_ALL}"
         status_text = f"{Fore.YELLOW}{Style.BRIGHT}● READY{Style.RESET_ALL}"
         context_line = CLI._get_context_status()
         hints = f"{Fore.LIGHTBLACK_EX}Capture: ^!+P  Talk: ^!+T{Style.RESET_ALL}"
-        
-        if pre_status:
-            print(f"\n  {pre_status}")
-        else:
-            print()
-            
+
         print(divider)
-        print(f"  {status_text}  {Fore.LIGHTBLACK_EX}::{Style.RESET_ALL}  {context_line}  {Fore.LIGHTBLACK_EX}::{Style.RESET_ALL}  {hints}")
-        print(f"{divider}\n")
+        if pre_status:
+            print(f"  {pre_status}")
+        print(
+            f"  {status_text}  {Fore.LIGHTBLACK_EX}::{Style.RESET_ALL}  {context_line}  {Fore.LIGHTBLACK_EX}::{Style.RESET_ALL}  {hints}"
+        )
+        print(divider)
 
     @staticmethod
     def select_monitor_menu(available_monitors):
         print("\n--- Available Monitors ---")
         primary_idx = 1
         for mon in available_monitors:
-            tag = " (Primary)" if mon['primary'] else ""
-            if mon['primary']: primary_idx = mon['index']
+            tag = " (Primary)" if mon["primary"] else ""
+            if mon["primary"]:
+                primary_idx = mon["index"]
             print(f"[{mon['index']}] {mon['name']} [{mon['res']}] {tag}")
-        
+
         print("\nSelect Monitor Index (or press Enter for Primary): ", end="")
         try:
             choice = input().strip()
@@ -93,51 +108,59 @@ class CLI:
             print("[!] No WASAPI input devices detected.")
             return None
 
-        for idx, (dev_id, name) in enumerate(input_devices):
+        for idx, (_dev_id, name) in enumerate(input_devices):
             print(f"[{idx}] {name}")
-        
+
         print("\nSelect Audio Device Index (or press Enter for Default): ", end="")
         try:
             choice = input().strip()
             if not choice:
-                return input_devices[0][0] # Default to first found
-            
+                return input_devices[0][0]  # Default to first found
+
             selected_idx = int(choice)
-            return input_devices[selected_idx][0] if 0 <= selected_idx < len(input_devices) else input_devices[0][0]
-        except:
+            return (
+                input_devices[selected_idx][0]
+                if 0 <= selected_idx < len(input_devices)
+                else input_devices[0][0]
+            )
+        except Exception:
             return input_devices[0][0]
 
     @staticmethod
     def select_engine_menu(available_engines):
         print("\n--- Select AI Engine ---")
         for i, engine in enumerate(available_engines):
-            print(f"[{i+1}] {engine.upper()}")
-        
+            print(f"[{i + 1}] {engine.upper()}")
+
         print("\nSelection (Default is 1): ", end="")
         try:
             choice = input().strip()
             idx = int(choice) - 1 if choice else 0
-            return available_engines[idx] if 0 <= idx < len(available_engines) else available_engines[0]
-        except:
+            return (
+                available_engines[idx]
+                if 0 <= idx < len(available_engines)
+                else available_engines[0]
+            )
+        except Exception:
             return available_engines[0]
 
     @staticmethod
     def select_skill_menu(skills):
         print("\n--- Select Initial Skill ---\n")
         for i, s in enumerate(skills):
-            print(f"[{i+1}] {s}")
-        print(f"[{len(skills)+1}] [+ Create New Skill]")
-        
+            print(f"[{i + 1}] {s}")
+        print(f"[{len(skills) + 1}] [+ Create New Skill]")
+
         print("\nSelection (Default is 1): ", end="")
         try:
             choice = input().strip()
             idx = int(choice) - 1 if choice else 0
-            
+
             if idx == len(skills):
                 return "NEW_SKILL"
-            
+
             return skills[idx] if 0 <= idx < len(skills) else skills[0]
-        except:
+        except Exception:
             return skills[0]
 
     @staticmethod
@@ -148,23 +171,27 @@ class CLI:
             return None
 
         for i, s in enumerate(skills):
-            print(f"[{i+1}] {s}")
-        
+            print(f"[{i + 1}] {s}")
+
         print("Select Skill Index (or Enter to cancel): ", end="")
         try:
             choice = input().strip()
-            if not choice: return None
-            
+            if not choice:
+                return None
+
             idx = int(choice) - 1
             return skills[idx] if 0 <= idx < len(skills) else None
-        except:
+        except Exception:
             return None
 
     @staticmethod
     def session_context_prompt():
         print("\n--- Custom Session Context ---")
-        print("Would you like to provide additional context (Resume, JD, Logs) via Notepad? (y/n): ", end="")
-        if input().lower().startswith('y'):
+        print(
+            "Would you like to provide additional context (Resume, JD, Logs) via Notepad? (y/n): ",
+            end="",
+        )
+        if input().lower().startswith("y"):
             return NotepadDriver.get_input("# PASTE ADDITIONAL CONTEXT HERE\n")
         return None
 
@@ -175,10 +202,9 @@ class CLI:
         print(" " * 30 + "Welcome to SidecarAI")
         print("=" * 75)
 
-
     @staticmethod
     def print_welcome(monitor_idx, skill_name, model_name):
-        print(f"\n[SYSTEM READY]")
+        print("\n[SYSTEM READY]")
         print(f"Target: Monitor {monitor_idx} | Skill: {skill_name}")
         print(f"Model : {model_name}")
         print("\nPrimary Vectors:")
@@ -189,6 +215,7 @@ class CLI:
         print("  [M]odel:   Ctrl + Alt + Shift + M")
         print("  [S]wap:    Ctrl + Alt + Shift + S")
         print("-" * 30)
+
     @staticmethod
     def prompt_for_variables(skill_name, placeholders):
         print(f"\n[i] Skill '{skill_name}' requires additional input:")
@@ -202,10 +229,17 @@ class CLI:
     def create_skill_wizard():
         print("\n--- CREATE NEW SKILL ---")
         name = input("Enter Skill Name (e.g., 'coding_expert'): ").strip().lower().replace(" ", "_")
-        if not name: return None, None, None, None
+        if not name:
+            return None, None, None, None
 
-        identity = NotepadDriver.get_input("# IDENTITY\nDefine who this agent is...\n") or "You are a helpful assistant."
-        instructions = NotepadDriver.get_input("# INSTRUCTIONS\nDefine how this agent works...\n") or "Follow instructions carefully."
+        identity = (
+            NotepadDriver.get_input("# IDENTITY\nDefine who this agent is...\n")
+            or "You are a helpful assistant."
+        )
+        instructions = (
+            NotepadDriver.get_input("# INSTRUCTIONS\nDefine how this agent works...\n")
+            or "Follow instructions carefully."
+        )
         context = NotepadDriver.get_input("# CONTEXT\nProvide background data...\n") or ""
-        
+
         return name, identity, instructions, context

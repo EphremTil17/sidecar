@@ -1,36 +1,37 @@
 import json
-import os
-from core.config import settings
+from pathlib import Path
+
 
 class SessionCache:
     """
-    Handles persistence of the last used session configurations.
+    Handles JSON-based persistence of session configuration data.
     """
-    CACHE_FILE = os.path.join(settings.PROJECT_ROOT, ".session_cache.json")
+
+    CACHE_FILE = Path(".session_cache.json")
 
     @classmethod
     def save(cls, config: dict):
         """Saves session configuration to a JSON file."""
         try:
-            with open(cls.CACHE_FILE, 'w') as f:
+            with cls.CACHE_FILE.open("w", encoding="utf-8") as f:
                 json.dump(config, f, indent=4)
         except Exception as e:
-            print(f"[!] Warning: Failed to save session cache: {e}")
+            print(f"[!] Error saving cache: {e}")
 
     @classmethod
     def load(cls) -> dict:
         """Loads session configuration from a JSON file."""
-        if not os.path.exists(cls.CACHE_FILE):
+        if not cls.CACHE_FILE.exists():
             return {}
         try:
-            with open(cls.CACHE_FILE, 'r') as f:
+            with cls.CACHE_FILE.open(encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"[!] Warning: Failed to load session cache: {e}")
+            print(f"[!] Error loading cache: {e}")
             return {}
 
     @classmethod
     def clear(cls):
         """Removes the cached session file."""
-        if os.path.exists(cls.CACHE_FILE):
-            os.remove(cls.CACHE_FILE)
+        if cls.CACHE_FILE.exists():
+            cls.CACHE_FILE.unlink()

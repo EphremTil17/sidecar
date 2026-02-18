@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional, Dict, Any, List
+from typing import Any
+
 
 class SidecarEventType(Enum):
     TEXT_CHUNK = auto()
@@ -9,8 +10,9 @@ class SidecarEventType(Enum):
     ERROR = auto()
     FINISH = auto()
 
+
 @dataclass
 class SidecarEvent:
     event_type: SidecarEventType
-    content: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    content: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)

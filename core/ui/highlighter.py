@@ -1,26 +1,29 @@
-from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
-from PyQt6.QtCore import Qt
+from typing import ClassVar
+
 from pygments import lex
 from pygments.lexers import get_lexer_by_name
-from pygments.token import Keyword, Name, String, Number, Comment, Operator, Token
+from pygments.token import Comment, Keyword, Name, Number, Operator, String, Token
+from PyQt6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat
+
 from core.utils.logger import logger
+
 
 class MarkdownHighlighter(QSyntaxHighlighter):
     """
     Sidecar 3.4 Production Highlighter.
-    
+
     SOLUTIONS (PM Audit):
     1. Aliases: Supports 'js', 'py', 'sh', 'yml'.
     2. Logic: Fixed inverted fence state.
     3. Error Handling: Replaced bare except with logged fallback.
     """
-    
-    LANG_ALIASES = {
+
+    LANG_ALIASES: ClassVar[dict[str, str]] = {
         "js": "javascript",
         "py": "python",
         "sh": "bash",
         "yml": "yaml",
-        "json": "json"
+        "json": "json",
     }
 
     def __init__(self, parent_doc, opacity_callback):
@@ -30,6 +33,7 @@ class MarkdownHighlighter(QSyntaxHighlighter):
 
         # Lexer cache to avoid repeated lexer creation (performance optimization)
         self._lexer_cache = {}
+        self._force_reset = False
 
         self.theme = {
             Keyword: "#F92672",
@@ -43,6 +47,10 @@ class MarkdownHighlighter(QSyntaxHighlighter):
             Operator: "#F92672",
             Token.Text: "#F8F8F2",
         }
+
+    def reset_state(self):
+        """Forces the next highlighted block to start in a non-code (state 0) mode."""
+        self._force_reset = True
 
     def _get_lexer(self):
         """Returns a cached lexer or creates a new one if not cached."""
@@ -69,21 +77,26 @@ class MarkdownHighlighter(QSyntaxHighlighter):
 
     def highlightBlock(self, text: str):
         prev_state = self.previousBlockState()
-        
+
+        # Web-Parity 3.8: Force reset for new Response Turns
+        if self._force_reset:
+            prev_state = 0
+            self._force_reset = False
+
         # 1. Fence & Language Detection
         if text.strip().startswith("```"):
-            lang = text.strip("`").strip().lower()
+            lang = text.strip().strip("`").strip().lower()
             if lang:
                 # Apply Aliases (js -> javascript, etc)
                 self.current_lang = self.LANG_ALIASES.get(lang, lang)
-            
+
             # Apply Header Style (Electric Blue)
             alpha = int(self.get_opacity() * 255)
             fmt = QTextCharFormat()
-            fmt.setForeground(QColor(102, 217, 239, alpha)) 
+            fmt.setForeground(QColor(102, 217, 239, alpha))
             fmt.setFontWeight(QFont.Weight.Bold)
             self.setFormat(0, len(text), fmt)
-            
+
             # Fixed Inverted Logic: 0 if previously in block, else 1
             self.setCurrentBlockState(0 if prev_state == 1 else 1)
             return

@@ -1,13 +1,16 @@
 from PyQt6.QtCore import QThread, pyqtSignal
+
 from core.drivers.hotkeys import HotkeyManager
 from core.utils.logger import logger
+
 
 class HotkeyThread(QThread):
     """
     Wraps HotkeyManager in a QThread to prevent blocking the GUI.
     Emits signals when hotkeys are pressed.
     """
-    signal_hotkey = pyqtSignal(int) # Emits the hotkey ID
+
+    signal_hotkey = pyqtSignal(int)  # Emits the hotkey ID
 
     def __init__(self, mappings: dict):
         super().__init__()
@@ -23,8 +26,10 @@ class HotkeyThread(QThread):
             else:
                 hk_id, label = mapping
                 modifiers = None  # Use default from HotkeyManager
-                
-            if self.manager.register_hotkey(hk_id, vk, lambda id=hk_id: self.signal_hotkey.emit(id), modifiers):
+
+            if self.manager.register_hotkey(
+                hk_id, vk, lambda id=hk_id: self.signal_hotkey.emit(id), modifiers
+            ):
                 logger.debug(f"Registered hotkey: {label} (ID: {hk_id})")
             else:
                 logger.error(f"Failed to register hotkey: {label}")

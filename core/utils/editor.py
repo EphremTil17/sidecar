@@ -1,40 +1,35 @@
-import os
 import subprocess
 import tempfile
-import time
+from contextlib import suppress
+from pathlib import Path
+
 
 class NotepadDriver:
     @staticmethod
-    def get_input(initial_content="", suffix=".md"):
+    def get_input_buffered(initial_content=""):
         """
-        Opens a temporary file in Notepad and waits for the user to save and close.
-        Returns the content of the file.
+        Launches Notepad with optional initial content and returns the result
+        after the user saves and closes the file.
         """
+        with tempfile.NamedTemporaryFile(
+            suffix=".txt", delete=False, mode="w", encoding="utf-8"
+        ) as tf:
+            tf.write(initial_content)
+            temp_path = Path(tf.name)
+
         try:
-            # Create a temporary file
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, mode='w', encoding='utf-8') as tf:
-                tf.write(initial_content)
-                temp_path = tf.name
+            # 1. Launch notepad and wait
+            subprocess.run(["notepad.exe", str(temp_path)], check=True)
 
-            # Open in Notepad (Windows specific)
-            print(f"[i] Opening editor for input... (Save and Close to continue)")
-            process = subprocess.Popen(['notepad.exe', temp_path])
-            
-            # Wait for the process to finish
-            process.wait()
-
-            # Read the content back
-            with open(temp_path, 'r', encoding='utf-8') as f:
+            # 2. Read the content back
+            with temp_path.open(encoding="utf-8") as f:
                 content = f.read()
 
-            # Clean up
-            try:
-                os.remove(temp_path)
-            except:
-                pass
+            # 3. Clean up
+            with suppress(OSError):
+                temp_path.unlink()
 
             return content.strip()
-
         except Exception as e:
-            print(f"[!] Error using Notepad driver: {e}")
-            return None
+            print(f"[!] Error in Notepad interaction: {e}")
+            return initial_content
